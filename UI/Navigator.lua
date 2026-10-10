@@ -15,7 +15,7 @@ local Theme = addon.Theme
 local Journey = addon.Journey
 local Navigation = addon.Navigation
 
-local WIDTH, HEIGHT, PAD = 330, 134, 14
+local WIDTH, HEIGHT, PAD = 330, 142, 14
 local INNER = WIDTH - 2 * PAD
 local INTERVAL = 0.5            -- seconds between updates
 local ARROW = 54                -- the direction arrow, in pixels
@@ -122,7 +122,8 @@ local function build()
 
     -- A secure button: it can cast a spell or use an item on a click, but its attributes can only
     -- be changed out of combat.
-    ui.use = Theme:Button(frame, "", INNER, 26, true, "SecureActionButtonTemplate")
+    -- It shows the spell's or item's own icon beside its name.
+    ui.use = Theme:ActionButton(frame, INNER, 34, "SecureActionButtonTemplate")
     ui.use:SetPoint("BOTTOMLEFT", PAD, 10)
     ui.use:RegisterForClicks("AnyUp", "AnyDown")
     -- For an "Equip" step the button is not secure (equipping isn't protected): after the click, put the item on.
@@ -145,6 +146,7 @@ local function configureUse(step)
 
     local source = step.source or {}
     local label = step.text
+    ui.use:SetIcon(Theme:StepIcon(step.method, step.source))
     ui.use.equipItem = nil
     if step.method == "equip" then
         ui.use:SetAttribute("type", nil)
@@ -158,12 +160,14 @@ local function configureUse(step)
         ui.use:SetAttribute("type", "item")
         ui.use:SetAttribute("item", "item:" .. source.itemID)
         ui.use:SetAttribute("spell", nil)
-        label = addon:GetAbilityLabel(source) or label
+        local name = addon:GetAbilityLabel(source)
+        label = name and L["STEP_USE_ITEM"]:format(name) or label
     elseif source.spellID then
         ui.use:SetAttribute("type", "spell")
         ui.use:SetAttribute("spell", source.spellID)
         ui.use:SetAttribute("item", nil)
-        label = addon:GetAbilityLabel(source) or label
+        local name = addon:GetAbilityLabel(source)
+        label = name and L["STEP_CAST"]:format(name) or label
     end
     ui.use.label:SetText(label)
 end

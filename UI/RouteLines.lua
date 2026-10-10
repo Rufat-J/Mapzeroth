@@ -1,11 +1,15 @@
 local addonName, addon = ...
 
 -- The route of the trip being followed, drawn on the world map (the design's "route on the map" board): on foot dotted, a flight
--- dashed, a boat solid, a teleport dotted, a small square where each step starts, a bigger one at each stop of a
--- tour and the end marked. What to draw is MapRoute's; this file puts it on the map's canvas, in whatever map the
+-- dashed, a boat solid, a teleport a ring and arrow where it leaves and where it lands, a small dot where each step
+-- starts, a square at each stop of a tour and the end marked. What to draw is MapRoute's; this file puts it on the map's canvas, in whatever map the
 -- player has open, and redraws it when the map changes. Colours come from the theme's map colours
 -- (Theme:MapColor): the map is parchment and sepia, so every line and marker sits on a dark casing, a slightly
 -- wider line under it, which keeps it readable on any of the map's art.
+--
+-- Each straight run of a line is one textured Line (and one more for its casing), the dots or dashes tiled along it
+-- by its texture coordinates from one soft-edged picture (Media/Line*, made by tools/gen_media.py), so a long route
+-- costs a few lines rather than one per dot, and its edges are smooth.
 --
 -- It draws on a frame of its own that fills the canvas, so it pans and zooms with the map, and sizes are
 -- worked out against the canvas' scale so lines and markers look the same at any zoom. Frames are built
@@ -17,23 +21,28 @@ addon.RouteLines = RouteLines
 local Theme = addon.Theme
 local MapRoute = addon.MapRoute
 
--- Screen pixels. `on`/`off` make dots or dashes. CASING is how much wider the dark line under each one is.
-local LOOK = {
-    foot = { width = 3, on = 2, off = 6 },
-    flight = { width = 3, on = 9, off = 6 },
-    boat = { width = 3.5 },
-    ability = { width = 3, on = 2, off = 6 },
-}
-local CASING = 2.5
--- Marker sizes: a step's start is a round dot, a stop or the end a square; where a boat or flight runs off the
--- map (MapRoute's "edge") a ring in its colour; a teleport is a ring where it leaves (portOut) and a solid dot
--- where it lands (portIn), in the teleport colour, never a line.
-local MARKER = { step = 7, edge = 14, portOut = 14, portIn = 11, stop = 11, dest = 15 }
-local RING = { edge = true, portOut = true }   -- hollow: the map shows through the middle
--- White pictures, tinted (Media/): a disc, and for a ring its coloured band and the dark edge under it, wider
--- both ways so it shows either side of the band.
 local MEDIA = "Interface\\AddOns\\" .. addonName .. "\\Media\\"
+-- Each style's tile: its picture, and the screen pixels one repeat covers along the line (`period`) and across it
+-- (`thickness`, the casing's full width; the line itself is drawn inside that). These match tools/gen_media.py.
+local LOOK = {
+    foot = { tile = "LineDot", period = 12, thickness = 8 },
+    flight = { tile = "LineDash", period = 18, thickness = 8 },
+    boat = { tile = "LineSolid", period = 8, thickness = 8, solid = true },
+    ability = { tile = "LineDot", period = 12, thickness = 8 },
+}
+RouteLines.LOOK = LOOK              -- for tests
+-- Marker sizes: a step's start is a round dot, a stop or the end a square; where a boat or flight runs off the
+-- map (MapRoute's "edge") a ring in its colour; a teleport is a ring with an arrow out of it where it leaves
+-- (portOut) and one with an arrow into it where it lands (portIn), in the teleport colour, never a line.
+local MARKER = { step = 7, edge = 14, portOut = 20, portIn = 20, stop = 11, dest = 15 }
+-- White pictures, tinted (Media/): a disc; a ring, as its coloured band and the dark edge under it (wider both ways
+-- so it shows either side of the band); and the teleport's ring and arrow, each with its own edge.
 local DOT, RING_BAND, RING_EDGE = MEDIA .. "Dot", MEDIA .. "Ring", MEDIA .. "RingEdge"
+local PICTURE = {
+    edge = { RING_BAND, RING_EDGE },
+    portOut = { MEDIA .. "PortOut", MEDIA .. "PortOutEdge" },
+    portIn = { MEDIA .. "PortIn", MEDIA .. "PortInEdge" },
+}
 local DONE_ALPHA = 0.35            -- steps already done fade
 -- Everything above is for a zone map. A continent or the whole world puts far more ground in the same space, so
 -- lines and markers shrink there to keep from smothering it, by the map's kind (Enum.UIMapType: 0 cosmic,
@@ -41,7 +50,7 @@ local DONE_ALPHA = 0.35            -- steps already done fade
 -- map's have none.
 local SHRINK = { [0] = 0.5, [1] = 0.5, [2] = 0.7 }
 local NO_CASING = { [0] = true, [1] = true }
-local MIN_WIDTH, MIN_ON = 2, 2     -- screen pixels: shrunk below these, lines and dots don't show at all
+local MIN_THICKNESS = 4            -- screen pixels: shrunk below this, a dot is a smudge
 RouteLines.DOT = DOT               -- for tests
 
 local state = { plan = nil, current = nil, lines = {}, linesUsed = 0, casings = {}, casingsUsed = 0, badges = {}, badgesUsed = 0 }
@@ -100,40 +109,47 @@ local function acquire(frame, pool, used, layer)
     return line
 end
 
-local function place(line, frame, ax, ay, bx, by, thickness, r, g, b, alpha)
+-- One straight run of a line in `look`, its edge (casing) picture if `edge`, from (x1, y1) to (x2, y2) off `anchor`
+-- of `frame`. `from` and `to` are how far along the whole line it starts and ends, so the pattern carries on across
+-- a bend; they and `thickness` (the tile's) are in the frame's units. The minimap draws with this too.
+function RouteLines.PlaceRun(line, look, edge, frame, anchor, x1, y1, x2, y2, from, to, thickness, r, g, b, alpha)
+    line:SetTexture(MEDIA .. look.tile .. (edge and "Edge" or ""), "REPEAT", "CLAMP", "TRILINEAR")
+    local period = thickness * look.period / look.thickness
+    line:SetTexCoord(from / period, to / period, 0, 1)
     line:SetThickness(thickness)
-    line:SetColorTexture(r, g, b, alpha)
-    line:SetStartPoint("TOPLEFT", frame, ax, -ay)
-    line:SetEndPoint("TOPLEFT", frame, bx, -by)
+    line:SetVertexColor(r, g, b, alpha)
+    line:SetStartPoint(anchor, frame, x1, y1)
+    line:SetEndPoint(anchor, frame, x2, y2)
+end
+local function place(line, frame, look, edge, ax, ay, bx, by, from, to, thickness, r, g, b, alpha)
+    RouteLines.PlaceRun(line, look, edge, frame, "TOPLEFT", ax, -ay, bx, -by, from, to, thickness, r, g, b, alpha)
 end
 
--- One run of a line, on its casing (unless the map has none: state.noCasing). The casing reaches `pad` past each
--- end, so dots are edged all round.
-local function segment(frame, ax, ay, bx, by, width, unit, r, g, b, alpha)
-    if state.noCasing then
-        place(acquire(frame, "lines", "linesUsed", "OVERLAY"), frame, ax, ay, bx, by, width * unit, r, g, b, alpha)
-        return
+-- One run, on its casing (unless the map has none: state.noCasing).
+local function run(frame, look, ax, ay, bx, by, from, to, thickness, r, g, b, alpha)
+    if not state.noCasing then
+        local cr, cg, cb, ca = Theme:MapColor("casing")
+        place(acquire(frame, "casings", "casingsUsed", "ARTWORK"), frame, look, true, ax, ay, bx, by, from, to,
+            thickness, cr, cg, cb, ca * alpha)
     end
-    local cr, cg, cb, ca = Theme:MapColor("casing")
-    local dx, dy = bx - ax, by - ay
-    local length = math.sqrt(dx * dx + dy * dy)
-    local pad = CASING / 2 * unit
-    local px, py = 0, 0
-    if length > 0 then px, py = dx / length * pad, dy / length * pad end
-    place(acquire(frame, "casings", "casingsUsed", "ARTWORK"), frame, ax - px, ay - py, bx + px, by + py,
-        (width + CASING) * unit, cr, cg, cb, ca * alpha)
-    place(acquire(frame, "lines", "linesUsed", "OVERLAY"), frame, ax, ay, bx, by, width * unit, r, g, b, alpha)
+    place(acquire(frame, "lines", "linesUsed", "OVERLAY"), frame, look, false, ax, ay, bx, by, from, to,
+        thickness, r, g, b, alpha)
 end
 
--- A marker: a dot or a square, on a dark edge.
+-- A marker: its picture on a dark edge. The minimap makes its markers with this too.
+function RouteLines.NewBadge(parent)
+    local badge = CreateFrame("Frame", nil, parent)
+    badge.ring = badge:CreateTexture(nil, "BACKGROUND")
+    badge.ring:SetAllPoints()
+    badge.fill = badge:CreateTexture(nil, "BORDER")
+    return badge
+end
+
 local function acquireBadge(frame)
     state.badgesUsed = state.badgesUsed + 1
     local badge = state.badges[state.badgesUsed]
     if not badge then
-        badge = CreateFrame("Frame", nil, frame)
-        badge.ring = badge:CreateTexture(nil, "BACKGROUND")
-        badge.ring:SetAllPoints()
-        badge.fill = badge:CreateTexture(nil, "BORDER")
+        badge = RouteLines.NewBadge(frame)
         state.badges[state.badgesUsed] = badge
     end
     badge:Show()
@@ -141,35 +157,37 @@ local function acquireBadge(frame)
 end
 
 local function drawPiece(frame, piece, unit, shrink, W, H)
-    local base = LOOK[piece.style] or LOOK.foot
-    local look = { width = math.max(base.width * shrink, MIN_WIDTH),
-                   on = base.on and math.max(base.on * shrink, MIN_ON), off = base.off and base.off * shrink }
+    local look = LOOK[piece.style] or LOOK.foot
+    local thickness = math.max(look.thickness * shrink, MIN_THICKNESS) * unit
     local r, g, b = Theme:MapColor(LOOK[piece.style] and piece.style or "foot")
     local alpha = (state.current and piece.step < state.current) and DONE_ALPHA or 1
-    local points = {}
-    for i, p in ipairs(piece.points) do points[i] = { x = p.x * W, y = p.y * H } end
-    if look.on then
-        for _, s in ipairs(MapRoute.Pattern(points, look.on * unit, look.off * unit)) do
-            segment(frame, s[1], s[2], s[3], s[4], look.width, unit, r, g, b, alpha)
-        end
-    else
-        for i = 1, #points - 1 do
-            segment(frame, points[i].x, points[i].y, points[i + 1].x, points[i + 1].y, look.width, unit, r, g, b, alpha)
+    -- A solid line's runs reach half its width past each end, so a bend has no notch on its outside.
+    local reach = look.solid and thickness / 2 or 0
+    local along = 0
+    for i = 1, #piece.points - 1 do
+        local p, q = piece.points[i], piece.points[i + 1]
+        local ax, ay, bx, by = p.x * W, p.y * H, q.x * W, q.y * H
+        local dx, dy = bx - ax, by - ay
+        local length = math.sqrt(dx * dx + dy * dy)
+        if length > 0 then
+            local ux, uy = dx / length * reach, dy / length * reach
+            run(frame, look, ax - ux, ay - uy, bx + ux, by + uy, along - reach, along + length + reach,
+                thickness, r, g, b, alpha)
+            along = along + length
         end
     end
 end
 
-local function drawMarker(frame, marker, unit, W, H)
+-- Dress a badge as `marker` (MapRoute's): its size (unscaled), picture and colours, faded if its step is before
+-- `current`. Where it goes is the caller's.
+function RouteLines.StyleBadge(badge, marker, current)
     local size = MARKER[marker.kind] or MARKER.step
-    local badge = acquireBadge(frame)
-    badge:SetScale(unit)
     badge:SetSize(size, size)
-    badge:ClearAllPoints()
-    badge:SetPoint("CENTER", frame, "TOPLEFT", (marker.x * W) / unit, (-marker.y * H) / unit)
     badge.fill:ClearAllPoints()
-    if RING[marker.kind] then
-        badge.ring:SetTexture(RING_EDGE)
-        badge.fill:SetTexture(RING_BAND)
+    local picture = PICTURE[marker.kind]
+    if picture then
+        badge.fill:SetTexture(picture[1])
+        badge.ring:SetTexture(picture[2])
         badge.fill:SetAllPoints()
     else
         local edge = size >= 10 and 2 or 1.5
@@ -186,21 +204,29 @@ local function drawMarker(frame, marker, unit, W, H)
         r, g, b = Theme:MapColor("dest")
     elseif marker.kind == "portOut" or marker.kind == "portIn" then
         r, g, b = Theme:MapColor("ability")
-        done = state.current and marker.step < state.current
+        done = current and marker.step < current
     elseif marker.kind == "edge" then
         r, g, b = Theme:MapColor(LOOK[marker.style] and marker.style or "foot")
-        done = state.current and marker.step < state.current
+        done = current and marker.step < current
     elseif marker.kind == "stop" then
         r, g, b = Theme:MapColor("stop")
-        done = state.current and marker.step < state.current
+        done = current and marker.step < current
     else
         r, g, b = Theme:MapColor(LOOK[marker.style] and marker.style or "foot")
-        done = state.current and marker.index < state.current
+        done = current and marker.index < current
     end
     local alpha = done and DONE_ALPHA or 1
     local cr, cg, cb, ca = Theme:MapColor("casing")
     badge.ring:SetVertexColor(cr, cg, cb, math.max(ca, 0.9) * alpha)
     badge.fill:SetVertexColor(r, g, b, alpha)
+end
+
+local function drawMarker(frame, marker, unit, W, H)
+    local badge = acquireBadge(frame)
+    badge:SetScale(unit)
+    badge:ClearAllPoints()
+    badge:SetPoint("CENTER", frame, "TOPLEFT", (marker.x * W) / unit, (-marker.y * H) / unit)
+    RouteLines.StyleBadge(badge, marker, state.current)
 end
 
 -- How much smaller than on a zone map to draw on map `mapID` (see SHRINK), and whether its lines go without casing.

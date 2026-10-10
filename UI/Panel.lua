@@ -22,8 +22,11 @@ local LIST_TOP = 86
 local ROW_H = 38
 local ROWS = math.floor((HEIGHT - PAD - LIST_TOP) / ROW_H)   -- as many result rows as the panel has room for
 local INDENT = 14                         -- how far an item of an accordion section sits in from its heading
-local STEP_H, STEPS = 30, 8               -- STEPS rows at most; fewer show when the route's notes take room (layoutSteps)
-local STEPS_TOP = LIST_TOP + 118          -- where the steps start, or lower if the notes above run longer
+local STEP_H, STEPS = 30, 9               -- STEPS rows at most; fewer show when the route's notes take room (layoutSteps)
+local SPLIT_TOP = LIST_TOP + 72           -- the bar of how the time splits by way of travel, under the total
+local HINT_TOP = LIST_TOP + 84            -- the route's notes, under that
+local STEPS_TOP = LIST_TOP + 86           -- where the steps start, or lower if there are notes
+local BADGE = 20                          -- a tour stop's numbered disc (themes with stopBadges)
 local STEPS_BOTTOM = HEIGHT - PAD - 28    -- and where they must end: above Start and the "more" note
 local PASTE_ROWS = 6                      -- list rows the open paste box takes, under "Multi-stop Route"
 
@@ -50,7 +53,8 @@ end
 -- ---------------------------------------------------------------------------------------
 -- Building
 
--- A row with a marker bar and a name; `withTime` adds a time on the right (route steps).
+-- A row with a marker bar and a name; `withTime` adds a time on the right (route steps), in the text style it names
+-- ("accent" for true).
 local function makeRow(parent, top, index, height, withTime)
     local row = Theme:Row(parent, INNER, height)
     row:SetPoint("TOPLEFT", PAD, -(top + (index - 1) * height))
@@ -59,7 +63,7 @@ local function makeRow(parent, top, index, height, withTime)
     row.name:SetWidth(INNER - 14 - (withTime and 68 or 8))
     row.name:SetWordWrap(false)
     if withTime then
-        row.eta = Theme:Text(row, "accent")
+        row.eta = Theme:Text(row, withTime == true and "accent" or withTime)
         row.eta:SetPoint("RIGHT", -6, 0)
         row.eta:SetJustifyH("RIGHT")
     end
@@ -249,15 +253,21 @@ local function build(parent)
     ui.routeTotal = Theme:Text(frame, "accent")
     ui.routeTotal:SetPoint("TOPLEFT", PAD, -(LIST_TOP + 54))
 
+    ui.split = Theme:SplitBar(frame, INNER, 4)
+    ui.split:SetPoint("TOPLEFT", PAD, -SPLIT_TOP)
+
     ui.routeHint = Theme:Text(frame, "warn")
-    ui.routeHint:SetPoint("TOPLEFT", PAD, -(LIST_TOP + 74))
+    ui.routeHint:SetPoint("TOPLEFT", PAD, -HINT_TOP)
     ui.routeHint:SetWidth(INNER)
     ui.routeHint:SetWordWrap(true)
 
     ui.steps = {}
     for i = 1, STEPS do
-        local row = makeRow(frame, STEPS_TOP, i, STEP_H, true)
+        local row = makeRow(frame, STEPS_TOP, i, STEP_H, "time")
         row:EnableMouse(false)
+        row.badge = Theme:Badge(row, BADGE)
+        row.badge:SetPoint("LEFT", 2, 0)
+        row.badge:Hide()
         row.name:ClearAllPoints()
         row.name:SetPoint("LEFT", 14, 0)
         row.name:SetWidth(INNER - 14 - 60)
@@ -301,7 +311,7 @@ local function hideList()
 end
 
 local function showRouteWidgets(show)
-    for _, widget in ipairs({ ui.back, ui.routeTitle, ui.routeTotal, ui.routeHint, ui.start, ui.more }) do
+    for _, widget in ipairs({ ui.back, ui.routeTitle, ui.routeTotal, ui.split, ui.routeHint, ui.start, ui.more }) do
         widget:SetShown(show)
     end
     if not show then
@@ -786,13 +796,36 @@ end
 local function layoutSteps()
     local hint = ui.routeHint:GetText()
     local height = (hint and hint ~= "" and ui.routeHint:GetStringHeight()) or 0
-    local top = math.max(STEPS_TOP, LIST_TOP + 74 + math.ceil(height) + 10)
+    local top = height > 0 and HINT_TOP + math.ceil(height) + 8 or STEPS_TOP
     state.stepsTop = top
     state.stepRows = math.max(1, math.min(STEPS, math.floor((STEPS_BOTTOM - top) / STEP_H)))
     for i, row in ipairs(ui.steps) do
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", PAD, -(top + (i - 1) * STEP_H))
     end
+end
+
+-- How a plan's time (both ways of a round trip) splits between ways of travelling: { { style, share }, ... }, the
+-- biggest first, for the bar under the total.
+function Panel.SplitShares(plan)
+    local seconds, total = {}, 0
+    local function add(steps)
+        for _, step in ipairs(steps or {}) do
+            local style = addon:Method(step.method).style or "default"
+            local s = step.seconds or 0
+            seconds[style] = (seconds[style] or 0) + s
+            total = total + s
+        end
+    end
+    add(plan.steps)
+    if plan.back then add(plan.back.steps) end
+    local shares = {}
+    if total <= 0 then return shares end
+    for style, s in pairs(seconds) do
+        if s > 0 then shares[#shares + 1] = { style = style, share = s / total } end
+    end
+    table.sort(shares, function(a, b) return a.share > b.share end)
+    return shares
 end
 
 function Panel:DisplayPlan(entry, plan)
@@ -820,7 +853,9 @@ function Panel:DisplayPlan(entry, plan)
         local index = 0
         for _, leg in ipairs(legs) do
             if leg.heading then
-                plan.shown[#plan.shown + 1] = { heading = true, text = leg.heading }     -- times are on the steps only
+                -- times are on the steps only; a tour stop's number and name are kept apart too, for a badge
+                plan.shown[#plan.shown + 1] = { heading = true, text = leg.heading, name = leg.name,
+                                                number = leg.stop and leg.stop.number }
             end
             for _, step in ipairs(leg.steps) do
                 index = index + 1
@@ -834,6 +869,7 @@ function Panel:DisplayPlan(entry, plan)
     local fareNote = fare > 0 and L["ROUTE_FARES"]:format(Journey:FormatMoney(fare)) or nil
     if fareNote and not legs then total = total .. " - " .. fareNote end
     ui.routeTotal:SetText(total)
+    ui.split:SetParts(Panel.SplitShares(plan))
     -- Each may be nil, so not ipairs over one table (it would stop at the first nil: a route with no fare note lost
     -- its flight hint that way).
     local hints = {}
@@ -855,17 +891,29 @@ end
 function Panel:RenderSteps()
     local plan = state.plan
     local list = plan.shown or plan.steps
+    -- A theme with stopBadges numbers a tour's stops in a disc and sets their steps in under them.
+    local badges = Theme:Has("stopBadges") and plan.shown ~= nil
     for i = 1, STEPS do
         local row, step = ui.steps[i], i <= state.stepRows and list[state.stepOffset + i]
         if step then
             local time = step.heading and "" or Journey:FormatTime(step.seconds)
-            row.name:SetText(step.text)
+            local badge = badges and step.heading and step.number
+            row.name:SetText(badge and step.name or step.text)
             row.eta:SetText(step.approx and L["TIME_ABOUT"]:format(time) or time)
+            row.eta.mzMethod = not step.heading and step.method or nil
+            Theme:Restyle(row.eta)
             row.markerMethod, row.markerSource = step.method, step.source or step.iconSource
             row.markerGroup = step.heading and "place" or nil
             Theme:Restyle(row)
-            -- An icon is wider than the chip: the text moves over for it.
-            local left = row.iconShown and 28 or 14
+            local indent = badges and not step.heading and BADGE - 4 or 0
+            row:SetIndent(indent)
+            row.badge:SetShown(badge and true or false)
+            if badge then
+                row.badge:SetNumber(step.number)
+                row.marker:Hide()
+            end
+            -- An icon is wider than the chip, and a badge wider still: the text moves over for them.
+            local left = (badge and BADGE + 10) or (row.iconShown and 28 or 14) + indent
             row.name:ClearAllPoints()
             row.name:SetPoint("LEFT", left, 0)
             row.name:SetWidth(INNER - left - 60)

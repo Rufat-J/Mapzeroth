@@ -1,16 +1,18 @@
 local addonName, addon = ...
 
 -- The route on the minimap, for the trip being followed (Navigator hands it over): the same looks as on the
--- world map (dots on foot, dashes for flights, solid for boats, dotted for teleports, each on a dark casing in
--- the theme's map colours), thinner, drawn round the player.
+-- world map (dots on foot, dashes for flights, solid for boats, each on a dark casing in the theme's map colours,
+-- and the same markers: where steps start, teleports, stops and the end), smaller, drawn round the player. Lines and
+-- markers are drawn with RouteLines' own pieces (textured runs, badges).
 --
 -- The minimap is a round window on the world, centred on the player, north up unless the player has set it
 -- to rotate. How many yards it spans depends on its zoom and on whether the player is indoors (the client
 -- has separate zoom scales for each, and no call to ask which, so it is found by nudging the zoom and seeing
 -- which of its two settings follows, falling back to IsIndoors()). Each piece of the route is worked out in yards on the
--- map the player is on, dashes are cut along it there (so they stay put on the ground as the player moves),
--- and every 0.1 s the dashes are shifted to the player, turned if the minimap rotates, scaled to pixels
--- and clipped to the circle. It draws nothing if the client can't do this (IsAvailable), or the setting is
+-- map the player is on, with how far along it each point is (so the dots stay put on the ground as the player
+-- moves), and every 0.1 s its runs are shifted to the player, turned if the minimap rotates, scaled to pixels
+-- and clipped to the circle. A marker past the rim isn't shown, except the end, which waits on the rim in its
+-- direction. It draws nothing if the client can't do this (IsAvailable), or the setting is
 -- off. Colours come from the theme.
 
 local MinimapLines = {}
@@ -25,19 +27,13 @@ local SIZES = {
     outdoor = { [0] = 466 + 2 / 3, 400, 333 + 1 / 3, 266 + 2 / 3, 200, 133 + 1 / 3 },
 }
 
--- Screen pixels.
-local LOOK = {
-    foot = { width = 2, on = 1.5, off = 4.5 },
-    flight = { width = 2, on = 6, off = 4 },
-    boat = { width = 2.5 },
-    ability = { width = 2, on = 1.5, off = 4.5 },
-}
-local CASING = 1.5             -- how much wider the dark line under each one is
+local SCALE = 0.7              -- lines and markers, against their size on a zone map
 local MARGIN = 3               -- keep the route off the rim
 local INTERVAL = 0.1           -- seconds between redraws
 local DONE_ALPHA = 0.35        -- steps already done fade
 
-local state = { plan = nil, current = nil, lines = {}, used = 0, casings = {}, casingsUsed = 0, indoors = false, built = nil, pieces = {} }
+local state = { plan = nil, current = nil, lines = {}, used = 0, casings = {}, casingsUsed = 0, badges = {}, badgesUsed = 0,
+                indoors = false, built = nil, pieces = {}, markers = {} }
 MinimapLines.state = state     -- for tests and tools
 
 -- Can this client draw on the minimap? (The settings page says so when it can't.)
@@ -117,58 +113,67 @@ local function ensureFrame()
     return frame
 end
 
-local function place(frame, pool, used, layer, x1, y1, x2, y2, thickness, r, g, b, alpha)
+local function acquire(frame, pool, used, layer)
     state[used] = state[used] + 1
     local line = state[pool][state[used]]
     if not line then
         line = frame:CreateLine(nil, layer)
         state[pool][state[used]] = line
     end
-    line:SetThickness(thickness)
-    line:SetColorTexture(r, g, b, alpha)
-    line:SetStartPoint("CENTER", frame, x1, y1)
-    line:SetEndPoint("CENTER", frame, x2, y2)
     line:Show()
+    return line
 end
 
--- One run of a line on its casing (under it, reaching a little past each end so dots are edged all round).
-local function segment(frame, x1, y1, x2, y2, width, unit, r, g, b, alpha)
+-- One run, on its casing.
+local function run(frame, look, x1, y1, x2, y2, from, to, thickness, r, g, b, alpha)
+    local place = addon.RouteLines.PlaceRun
     local cr, cg, cb, ca = Theme:MapColor("casing")
-    local dx, dy = x2 - x1, y2 - y1
-    local length = math.sqrt(dx * dx + dy * dy)
-    local px, py = 0, 0
-    if length > 0 then px, py = dx / length * CASING / 2 * unit, dy / length * CASING / 2 * unit end
-    place(frame, "casings", "casingsUsed", "ARTWORK", x1 - px, y1 - py, x2 + px, y2 + py, (width + CASING) * unit, cr, cg, cb, ca * alpha)
-    place(frame, "lines", "used", "OVERLAY", x1, y1, x2, y2, width * unit, r, g, b, alpha)
+    place(acquire(frame, "casings", "casingsUsed", "ARTWORK"), look, true, frame, "CENTER", x1, y1, x2, y2, from, to,
+        thickness, cr, cg, cb, ca * alpha)
+    place(acquire(frame, "lines", "used", "OVERLAY"), look, false, frame, "CENTER", x1, y1, x2, y2, from, to,
+        thickness, r, g, b, alpha)
+end
+
+local function acquireBadge(frame)
+    state.badgesUsed = state.badgesUsed + 1
+    local badge = state.badges[state.badgesUsed]
+    if not badge then
+        badge = addon.RouteLines.NewBadge(frame)
+        state.badges[state.badgesUsed] = badge
+    end
+    badge:Show()
+    return badge
 end
 
 local function hideAll()
     for i = 1, state.used do state.lines[i]:Hide() end
     for i = 1, state.casingsUsed do state.casings[i]:Hide() end
-    state.used, state.casingsUsed = 0, 0
+    for i = 1, state.badgesUsed do state.badges[i]:Hide() end
+    state.used, state.casingsUsed, state.badgesUsed = 0, 0, 0
 end
 
--- The route as dashes in yards on map `mapID` (x east, y south), for a minimap spanning `yardsPerPixel`.
-local function rebuild(mapID, yardsPerPixel)
-    state.pieces = {}
-    state.built = { mapID = mapID, ypp = yardsPerPixel, plan = state.plan }
+-- The route in yards on map `mapID` (x east, y south): each piece's points with how far along it they are, and the
+-- markers.
+local function rebuild(mapID)
+    state.pieces, state.markers = {}, {}
+    state.built = { mapID = mapID, plan = state.plan }
     local xScale, yScale = addon.Navigation.YardsPerUnit(mapID)
     if not xScale then return end
-    local pieces = MapRoute:Pieces(state.plan, mapID)
+    local pieces, markers = MapRoute:Pieces(state.plan, mapID)
     for _, piece in ipairs(pieces) do
-        local look = LOOK[piece.style] or LOOK.foot
-        local points = {}
-        for i, p in ipairs(piece.points) do points[i] = { x = p.x * xScale, y = p.y * yScale } end
-        local segments
-        if look.on then
-            segments = MapRoute.Pattern(points, look.on * yardsPerPixel, look.off * yardsPerPixel)
-        else
-            segments = {}
-            for i = 1, #points - 1 do
-                segments[i] = { points[i].x, points[i].y, points[i + 1].x, points[i + 1].y }
-            end
+        local points, along = {}, 0
+        for i, p in ipairs(piece.points) do
+            local x, y = p.x * xScale, p.y * yScale
+            if i > 1 then along = along + math.sqrt((x - points[i - 1].x) ^ 2 + (y - points[i - 1].y) ^ 2) end
+            points[i] = { x = x, y = y, along = along }
         end
-        state.pieces[#state.pieces + 1] = { style = piece.style, step = piece.step, segments = segments }
+        state.pieces[#state.pieces + 1] = { style = piece.style, step = piece.step, points = points }
+    end
+    for _, marker in ipairs(markers) do
+        local copy = {}
+        for k, v in pairs(marker) do copy[k] = v end
+        copy.x, copy.y = marker.x * xScale, marker.y * yScale
+        state.markers[#state.markers + 1] = copy
     end
 end
 
@@ -184,9 +189,7 @@ local function draw(frame)
     local radius = width / 2 - MARGIN
     local ypp = yardsAcross() / width
     local built = state.built
-    if not built or built.mapID ~= mapID or built.plan ~= state.plan or math.abs(built.ypp - ypp) > 1e-6 then
-        rebuild(mapID, ypp)
-    end
+    if not built or built.mapID ~= mapID or built.plan ~= state.plan then rebuild(mapID) end
     local xScale, yScale = addon.Navigation.YardsPerUnit(mapID)
     if not xScale then return end
     local playerX, playerY = px * xScale, py * yScale
@@ -204,15 +207,39 @@ local function draw(frame)
     local mine, ui = frame:GetEffectiveScale(), UIParent and UIParent:GetEffectiveScale()
     if mine and ui and mine > 0 then unit = ui / mine end
 
+    local LOOK = addon.RouteLines.LOOK
     for _, piece in ipairs(state.pieces) do
         local look = LOOK[piece.style] or LOOK.foot
+        local thickness = look.thickness * SCALE * unit
         local r, g, b = Theme:MapColor(LOOK[piece.style] and piece.style or "foot")
         local alpha = (state.current and piece.step < state.current) and DONE_ALPHA or 1
-        for _, s in ipairs(piece.segments) do
-            local ax, ay = toPixels(s[1], s[2])
-            local bx, by = toPixels(s[3], s[4])
+        for i = 1, #piece.points - 1 do
+            local p, q = piece.points[i], piece.points[i + 1]
+            local ax, ay = toPixels(p.x, p.y)
+            local bx, by = toPixels(q.x, q.y)
             local x1, y1, x2, y2 = MapRoute.ClipCircle(ax, ay, bx, by, radius)
-            if x1 then segment(frame, x1, y1, x2, y2, look.width, unit, r, g, b, alpha) end
+            if x1 and (bx ~= ax or by ~= ay) then
+                -- Where the clipped run starts and ends along the line, in pixels, so the pattern stays on the ground.
+                local start = p.along / ypp
+                local from = start + math.sqrt((x1 - ax) ^ 2 + (y1 - ay) ^ 2)
+                local to = start + math.sqrt((x2 - ax) ^ 2 + (y2 - ay) ^ 2)
+                run(frame, look, x1, y1, x2, y2, from, to, thickness, r, g, b, alpha)
+            end
+        end
+    end
+
+    for _, marker in ipairs(state.markers) do
+        local x, y = toPixels(marker.x, marker.y)
+        local distance = math.sqrt(x * x + y * y)
+        if distance > radius and marker.kind == "dest" then
+            x, y, distance = x / distance * radius, y / distance * radius, radius
+        end
+        if distance <= radius then
+            local badge = acquireBadge(frame)
+            badge:SetScale(unit * SCALE)
+            badge:ClearAllPoints()
+            badge:SetPoint("CENTER", frame, "CENTER", x / (unit * SCALE), y / (unit * SCALE))
+            addon.RouteLines.StyleBadge(badge, marker, state.current)
         end
     end
 end

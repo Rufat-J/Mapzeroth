@@ -23,13 +23,15 @@ addon.Theme:Register("moderndark", {
         rowHover = rgb("ece6d6", 0.06), rowSelected = rgb("d4a64f", 0.16), divider = rgb("2b333d"),
     },
     fonts = { title = "GameFontNormalLarge", body = "GameFontHighlight", small = "GameFontHighlightSmall" },
+    stopBadges = true,                           -- a tour's stops numbered in a disc, their steps set in under them
+    methodTimes = true,                          -- step times in the colour of how the step travels
     panel = { backdrop = { bgFile = FLAT, edgeFile = FLAT, edgeSize = 1,
                            insets = { left = 1, right = 1, top = 1, bottom = 1 } } },
     button = "flat",
     edit = { backdrop = { bgFile = FLAT, edgeFile = FLAT, edgeSize = 1,
                           insets = { left = 1, right = 1, top = 1, bottom = 1 } } },
     styles = {
-        foot = rgb("ece6d6"), flight = rgb("63b7a4"), boat = rgb("63b7a4"), ability = rgb("d4a64f"),
+        foot = rgb("ece6d6"), flight = rgb("63b7a4"), boat = rgb("6fa3e0"), ability = rgb("b38cf0"),   -- the map's hues, softer
         default = rgb("a8a191"),
     },
     map = {                                      -- brighter than the panel's: the map is parchment

@@ -36,8 +36,9 @@ local skin = {}                                       -- role -> function(widget
 
 local BLIZZARD_BUTTON = "Interface\\Buttons\\UI-Panel-Button-"
 local FLAT = "Interface\\Buttons\\WHITE8x8"
-local ARROW = "Interface\\Minimap\\ROTATING-MINIMAPARROW"      -- an arrow pointing up, in every client
-local ARROW_CROP = 0.15         -- that texture is mostly empty around the arrow: trim it so the arrow fills its box
+-- Our own arrow pointing up (tools/gen_media.py): white and a paler grey half, on a dark edge, tinted with the accent.
+-- Drawn large and scaled down, so it stays crisp at any size.
+local ARROW = "Interface\\AddOns\\" .. addonName .. "\\Media\\Arrow"
 
 -- The picture beside a route step when the player shows icons instead of colour chips (the stepMarkers setting).
 -- Each is a list of candidates, the first the client has winning: the classic clients lack some later art, so the
@@ -73,6 +74,9 @@ function Theme:Register(id, def)
 end
 
 function Theme:Current() return current end
+-- Whether the current theme turns on a layout choice: stopBadges (a tour's stops numbered in a disc, their steps
+-- set in under them), methodTimes (step times in the colour of how the step travels).
+function Theme:Has(flag) return current ~= nil and current[flag] == true end
 function Theme:List() return order end
 function Theme:Label(id) return themes[id] and themes[id].label or id end
 
@@ -207,8 +211,8 @@ skin.panel = function(frame)
 end
 
 skin.arrow = function(arrow)
-    arrow:SetTexture(current.arrow or ARROW)
-    local crop = current.arrow and (current.arrowCrop or 0) or ARROW_CROP
+    arrow:SetTexture(current.arrow or ARROW, "CLAMP", "CLAMP", "TRILINEAR")
+    local crop = current.arrow and current.arrowCrop or 0
     arrow:SetTexCoord(crop, 1 - crop, crop, 1 - crop)
     arrow:SetVertexColor(Theme:Color("accent"))
 end
@@ -229,9 +233,22 @@ skin.bar = function(bar)
     bar.bg:SetColorTexture(Theme:Color("editBg"))
 end
 
--- The colour each text style is drawn in.
+-- The colour each text style is drawn in. "time" is a route step's time: the accent, or with the theme's
+-- `methodTimes` the colour of how the step travels (fs.mzMethod), so the list matches the lines on the map.
 local TEXT_COLORS = { title = "accent", body = "text", small = "dim", dim = "dim", accent = "accent",
-                      good = "good", warn = "warn", button = "buttonText", primary = "primaryText" }
+                      good = "good", warn = "warn", button = "buttonText", primary = "primaryText", time = "accent" }
+
+-- The game's fonts carry a dark drop shadow, which blurs dark text on a light ground: a theme with `noShadow`, and dark
+-- text on a primary (light) button, go without it; everything else keeps its font's own.
+local function setShadow(fs, off)
+    if not fs.SetShadowOffset then return end
+    local object = fs.GetFontObject and fs:GetFontObject()
+    if off then
+        fs:SetShadowOffset(0, 0)
+    elseif object and object.GetShadowOffset then
+        fs:SetShadowOffset(object:GetShadowOffset())
+    end
+end
 
 skin.text = function(fs, opts)
     local style = opts.style
@@ -239,6 +256,27 @@ skin.text = function(fs, opts)
         or current.fonts.body
     fs:SetFontObject(fontObject(font))
     fs:SetTextColor(Theme:Color(TEXT_COLORS[style] or "text"))
+    if style == "time" and current.methodTimes and fs.mzMethod then
+        local methodStyle = addon:Method(fs.mzMethod).style
+        if methodStyle == "foot" then fs:SetTextColor(Theme:Color("dim")) else fs:SetTextColor(Theme:StyleColor(methodStyle)) end
+    end
+    setShadow(fs, current.noShadow or (style == "primary" and current.button ~= "blizzard"))
+end
+
+-- A tour stop's number in a disc of the primary button's colours.
+skin.badge = function(badge)
+    badge.disc:SetVertexColor(Theme:Color("primaryBg"))
+    badge.number:SetFontObject(fontObject(current.fonts.small))
+    badge.number:SetTextColor(Theme:Color("primaryText"))
+    setShadow(badge.number, true)
+end
+
+-- How a route's time splits between ways of travelling: a part per route style, in the style's colour.
+skin.split = function(bar)
+    bar.bg:SetColorTexture(Theme:Color("editBg"))
+    for i, part in ipairs(bar.parts) do
+        if bar.styles[i] then part:SetColorTexture(Theme:StyleColor(bar.styles[i])) end
+    end
 end
 
 local BUTTON_SLOTS = {
@@ -273,7 +311,9 @@ skin.button = function(button, opts)
         if state == "hover" then bg = opts.primary and "primaryBg" or "buttonHover" end
         if state == "pressed" then bg = "buttonPressed" end
         button:SetBackdropColor(Theme:Color(bg))
-        button:SetBackdropBorderColor(Theme:Color(opts.primary and "primaryBg" or "panelBorder"))
+        -- An action button (the navigator's "use this") is an ordinary one edged in the accent: it says "do this"
+        -- without dark text on a bright fill.
+        button:SetBackdropBorderColor(Theme:Color(opts.primary and "primaryBg" or opts.action and "accent" or "panelBorder"))
         skin.text(button.label, { style = opts.primary and "primary" or "button" })
     end
 end
@@ -394,7 +434,8 @@ function Theme:Text(parent, style)
     return register(fs, "text", { style = style or "body" })
 end
 
--- `template` adds to the button's templates, for a secure button ("SecureActionButtonTemplate").
+-- `template` adds to the button's templates, for a secure button ("SecureActionButtonTemplate"). `primary` is the
+-- filled main button, or "action" for the accent-edged one with a picture (Theme:ActionButton).
 function Theme:Button(parent, text, width, height, primary, template)
     local button = CreateFrame("Button", nil, parent, template and (template .. ",BackdropTemplate") or "BackdropTemplate")
     button:SetSize(width, height)
@@ -409,7 +450,29 @@ function Theme:Button(parent, text, width, height, primary, template)
     button:SetScript("OnLeave", function() state("normal") end)
     button:SetScript("OnMouseDown", function() state("pressed") end)
     button:SetScript("OnMouseUp", function() state("hover") end)
-    return register(button, "button", { primary = primary })
+    local action = primary == "action"
+    return register(button, "button", { primary = primary and not action, action = action })
+end
+
+-- A button for a spell or item: its icon on the left, the name beside it. button:SetIcon(texture) sets the picture
+-- (nil hides it).
+function Theme:ActionButton(parent, width, height, template)
+    local button = Theme:Button(parent, "", width, height, "action", template)
+    local size = height - 8
+    button.icon = button:CreateTexture(nil, "ARTWORK")
+    button.icon:SetSize(size, size)
+    button.icon:SetPoint("LEFT", 4, 0)
+    button.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    button.label:ClearAllPoints()
+    button.label:SetPoint("LEFT", button.icon, "RIGHT", 10, 0)
+    button.label:SetPoint("RIGHT", -8, 0)
+    button.label:SetJustifyH("LEFT")
+    button.label:SetWordWrap(false)
+    function button:SetIcon(texture)
+        self.icon:SetTexture(texture)
+        self.icon:SetShown(texture ~= nil)
+    end
+    return button
 end
 
 -- A button for the minimap's rim, `icon` a texture in it. Placing it (round the rim) is the caller's; the ring and the
@@ -548,6 +611,53 @@ function Theme:Arrow(parent, size)
     return register(arrow, "arrow")
 end
 
+-- A number in a disc (a tour stop's): badge:SetNumber(n).
+function Theme:Badge(parent, size)
+    local badge = CreateFrame("Frame", nil, parent)
+    badge:SetSize(size, size)
+    badge.disc = badge:CreateTexture(nil, "ARTWORK")
+    badge.disc:SetAllPoints()
+    badge.disc:SetTexture("Interface\\AddOns\\" .. addonName .. "\\Media\\Dot")
+    badge.number = withFont(badge:CreateFontString(nil, "OVERLAY"))
+    badge.number:SetPoint("CENTER", 0, 0)
+    function badge:SetNumber(n) self.number:SetText(n) end
+    return register(badge, "badge")
+end
+
+-- A thin bar split into parts: bar:SetParts({ { style = "flight", share = 0.3 }, ... }), shares adding up to 1.
+local SPLIT_PARTS = 4
+function Theme:SplitBar(parent, width, height)
+    local bar = CreateFrame("Frame", nil, parent)
+    bar:SetSize(width, height)
+    bar.bg = bar:CreateTexture(nil, "BACKGROUND")
+    bar.bg:SetAllPoints()
+    bar.parts, bar.styles, bar.mzWidth = {}, {}, width
+    for i = 1, SPLIT_PARTS do
+        bar.parts[i] = bar:CreateTexture(nil, "ARTWORK")
+        bar.parts[i]:SetHeight(height)
+        bar.parts[i]:Hide()
+    end
+    function bar:SetParts(list)
+        local x, width = 0, self.mzWidth
+        for i, part in ipairs(self.parts) do
+            local item = list[i]
+            local w = item and math.floor(item.share * width + 0.5) or 0
+            self.styles[i] = item and item.style
+            if w > 0 then
+                part:ClearAllPoints()
+                part:SetPoint("LEFT", x, 0)
+                part:SetWidth(w)
+                part:Show()
+                x = x + w
+            else
+                part:Hide()
+            end
+        end
+        if current then skin.split(self) end
+    end
+    return register(bar, "split")
+end
+
 -- A progress bar (0 to 1): bar:SetValue(fraction).
 function Theme:Bar(parent, width, height)
     local bar = CreateFrame("StatusBar", nil, parent)
@@ -647,6 +757,11 @@ function Theme:Row(parent, width, height)
     row:SetScript("OnLeave", function(self) self.hl:Hide() end)
     function row:SetSelected(selected)
         if selected then self.sel:Show() else self.sel:Hide() end
+    end
+    -- Moves the marker (and icon) right by `indent`, for a row set in under a heading.
+    function row:SetIndent(indent)
+        self.marker:SetPoint("LEFT", 4 + indent, 0)
+        self.icon:SetPoint("LEFT", 4 + indent, 0)
     end
     return register(row, "row")
 end

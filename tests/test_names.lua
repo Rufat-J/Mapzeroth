@@ -161,21 +161,6 @@ C_Spell = { GetSpellInfo = function(id) if id == 3908 then return { name = "Tail
 local tailor = find(function(n) return n.kind == "trainer" and n.trainer == "TAILORING" and n.city == "stormwind" end)
 check(tailor and addon:GetNodeName(tailor) == "Stormwind Tailoring Trainer", "profession trainer name: " .. tostring(tailor and addon:GetNodeName(tailor)))
 
--- 11. Rank text loads lazily: the first look has a name but no rank, and asks for a load.
-local loadRequests, loaded = {}, false
-C_Spell = {
-    GetSpellInfo = function(id) return { name = "Tailoring" } end,
-    GetSpellSubtext = function(id) return loaded and "Journeyman" or nil end,
-    RequestLoadSpellData = function(id) loadRequests[#loadRequests + 1] = id end,
-}
-local name1, rank1 = addon:GetSpellLabel(3909)
-check(name1 == "Tailoring" and rank1 == nil, "first look: name but no rank yet")
-check(loadRequests[1] == 3909, "first look requests the spell data")
-loaded = true
-local name2, rank2 = addon:GetSpellLabel(3909)
-check(name2 == "Tailoring" and rank2 == "Journeyman", "second look: rank text is there")
-check(#loadRequests == 1, "no further load request once it has loaded")
-
 -- Finding 18: a zone's name is asked of the client once per map, until the name cache is cleared.
 do
     local asked = 0

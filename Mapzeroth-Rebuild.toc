@@ -99,6 +99,7 @@ MapRoute.lua
 UI\Theme.lua
 UI\Themes\Classic.lua
 UI\Themes\ModernDark.lua
+UI\Themes\Cartographer.lua
 UI\RouteLines.lua
 UI\MinimapLines.lua
 UI\LinkPopup.lua

@@ -9,8 +9,8 @@ local addonName, addon = ...
 -- on their own.
 --
 -- Each kind of travel has its own look (the design's "route on the map" board): on foot is dotted, a
--- flight dashed, a boat, zeppelin or tram solid, a teleport, hearthstone or portal dotted in the
--- accent colour. Dashes and dots are runs of short segments along the path, which Pattern cuts.
+-- flight dashed, a boat, zeppelin or tram solid; a teleport, hearthstone or portal is no line, just a marker
+-- where it leaves and one where it lands. How each is drawn (the dots and dashes) is RouteLines'.
 
 local MapRoute = {}
 addon.MapRoute = MapRoute
@@ -100,40 +100,6 @@ function MapRoute:Pieces(plan, mapID)
     local x, y = lastPoint(steps[#steps])
     if x then markers[#markers + 1] = { kind = "dest", x = x, y = y } end
     return pieces, markers
-end
-
--- The runs of a dashed line along `points` ({ {x, y}, ... }, in any units): `on` long, then a gap of `off`,
--- carrying on across corners. Returns { { x1, y1, x2, y2 }, ... }. A dot is a dash a few units long.
-function MapRoute.Pattern(points, on, off)
-    local out = {}
-    if #points < 2 or on <= 0 then return out end
-    local drawing, remaining = true, on
-    local startX, startY = points[1].x, points[1].y
-    for i = 1, #points - 1 do
-        local x0, y0, x1, y1 = points[i].x, points[i].y, points[i + 1].x, points[i + 1].y
-        local dx, dy = x1 - x0, y1 - y0
-        local length = math.sqrt(dx * dx + dy * dy)
-        local at = 0
-        if drawing and i > 1 then startX, startY = x0, y0 end        -- a dash goes on round the corner
-        while length - at > 1e-9 do
-            local step = math.min(remaining, length - at)
-            at, remaining = at + step, remaining - step
-            local px, py = x0 + dx * at / length, y0 + dy * at / length
-            if remaining <= 1e-9 then
-                if drawing then
-                    out[#out + 1] = { startX, startY, px, py }
-                    drawing, remaining = false, off
-                else
-                    drawing, remaining, startX, startY = true, on, px, py
-                end
-            end
-        end
-        if drawing and (startX ~= x1 or startY ~= y1) then              -- the corner ends this piece of the dash
-            out[#out + 1] = { startX, startY, x1, y1 }
-            startX, startY = x1, y1
-        end
-    end
-    return out
 end
 
 -- The part of the segment (x1, y1)-(x2, y2) inside a circle of `radius` about the origin, as x1, y1, x2, y2,

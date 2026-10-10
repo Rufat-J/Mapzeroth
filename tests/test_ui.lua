@@ -92,7 +92,7 @@ addon.FlightKnowledge:Record({ { nodeID = 2, state = 0 }, { nodeID = 6, state = 
 
 -- Themes: both are registered and both skin what we build.
 local Theme = addon.Theme
-check(#Theme:List() == 2, "two themes ship: " .. table.concat(Theme:List(), ","))
+check(#Theme:List() == 3, "three themes ship: " .. table.concat(Theme:List(), ","))
 Theme:Init("moderndark")
 check(Theme:Current().id == "moderndark", "Modern Dark is the default")
 
@@ -214,16 +214,16 @@ end
 -- says how many are out of sight, above as well as below (a scrolled-away first step was missed).
 local function fakeStep(i) return { method = "walk", seconds = 10, text = "Step " .. i, approx = false } end
 local longSteps = {}
-for i = 1, 10 do longSteps[i] = fakeStep(i) end
+for i = 1, 12 do longSteps[i] = fakeStep(i) end
 local LAST = #box.steps                       -- how many rows the list has
 addon.Panel:DisplayPlan({ name = "Somewhere far" }, { steps = longSteps, cost = 90 })
 check(box.steps[1].name._text == "Step 1" and box.steps[LAST].name._text == "Step " .. LAST, "the first " .. LAST .. " show")
-check(box.more._text == ("%d more below"):format(10 - LAST), "and how many are hidden below: " .. tostring(box.more._text))
+check(box.more._text == ("%d more below"):format(#longSteps - LAST), "and how many are hidden below: " .. tostring(box.more._text))
 addon.Panel:Scroll(1)
 check(box.steps[1].name._text == "Step 2" and box.steps[LAST].name._text == "Step " .. (LAST + 1), "the wheel moves the window: " .. box.steps[1].name._text)
-check(box.more._text == ("1 more above   %d more below"):format(10 - LAST - 1), "the hidden counts follow, both ways: " .. tostring(box.more._text))
+check(box.more._text == ("1 more above   %d more below"):format(#longSteps - LAST - 1), "the hidden counts follow, both ways: " .. tostring(box.more._text))
 addon.Panel:Scroll(1000)
-check(box.steps[LAST].name._text == "Step 10" and box.more._text == ("%d more above"):format(10 - LAST),
+check(box.steps[LAST].name._text == "Step " .. #longSteps and box.more._text == ("%d more above"):format(#longSteps - LAST),
     "scrolling clamps at the end, with only what is above left to hint: " .. tostring(box.more._text))
 addon.Panel:Scroll(-1000)
 check(box.steps[1].name._text == "Step 1", "and clamps back at the start")
@@ -231,17 +231,17 @@ check(box.steps[1].name._text == "Step 1", "and clamps back at the start")
 -- A step the player has reached that's scrolled out of sight is scrolled back into view.
 state.pinned = true
 local realModel = addon.Navigation.Model
-addon.Navigation.Model = function() return { index = 10, finished = false } end
+addon.Navigation.Model = function() return { index = #longSteps, finished = false } end
 addon.Panel:MarkCurrentStep()
-check(box.steps[LAST].name._text == "Step 10" and box.steps[LAST].sel._shown, "the current step scrolls into view and is marked: " .. box.steps[LAST].name._text)
+check(box.steps[LAST].name._text == "Step " .. #longSteps and box.steps[LAST].sel._shown, "the current step scrolls into view and is marked: " .. box.steps[LAST].name._text)
 -- But only when it changes: the player scrolling away from it isn't pulled back while the trip stays on that step.
 addon.Panel:Scroll(-1000)
-addon.Panel:OnTripUpdate({ index = 10, finished = false })
+addon.Panel:OnTripUpdate({ index = #longSteps, finished = false })
 check(box.steps[1].name._text == "Step 1", "scrolled up by hand, the list stays there: " .. box.steps[1].name._text)
 addon.Navigation.Model = function() return { index = 2, finished = false } end
 addon.Panel:OnTripUpdate({ index = 2, finished = false })
 addon.Panel:Scroll(1000)
-check(box.steps[LAST].name._text == "Step 10", "and can be scrolled to the end past the current step: " .. box.steps[LAST].name._text)
+check(box.steps[LAST].name._text == "Step " .. #longSteps, "and can be scrolled to the end past the current step: " .. box.steps[LAST].name._text)
 addon.Navigation.Model = function() return { index = 3, finished = false } end
 addon.Panel:OnTripUpdate({ index = 3, finished = false })
 check(box.steps[1].name._text == "Step 3", "the trip moving on to a step out of sight scrolls to it again: " .. box.steps[1].name._text)
@@ -287,9 +287,9 @@ check(top >= 86 + 74 + 80, "the steps start under the hint: " .. tostring(top))
 check(top > plainTop and state.stepRows < LAST, "lower than usual, with fewer rows: " .. state.stepRows)
 check(box.steps[state.stepRows]._top + 30 <= 500 - 16 - 28, "and still above Start")
 check(not box.steps[state.stepRows + 1]._shown, "the rows that don't fit are hidden")
-check(box.more._text == ("%d more below"):format(10 - state.stepRows), "and counted: " .. tostring(box.more._text))
+check(box.more._text == ("%d more below"):format(#longSteps - state.stepRows), "and counted: " .. tostring(box.more._text))
 addon.Panel:Scroll(1000)
-check(box.steps[state.stepRows].name._text == "Step 10", "scrolling reaches the last step with fewer rows")
+check(box.steps[state.stepRows].name._text == "Step " .. #longSteps, "scrolling reaches the last step with fewer rows")
 box.routeHint.GetStringHeight = nil
 addon.Journey.FareText = realFareText
 
@@ -719,7 +719,9 @@ CreateFrame = function()
         line.SetStartPoint = function(self, _, _, x, y) self._from = { x, y } end
         line.SetEndPoint = function(self, _, _, x, y) self._to = { x, y } end
         line.SetThickness = function(self, t) self._thickness = t end
-        line.SetColorTexture = function(self, r, g, b, a) self._alpha = a end
+        line.SetVertexColor = function(self, r, g, b, a) self._alpha = a end
+        line.SetTexture = function(self, file, wrapH) self._texture, self._wrap = file, wrapH end
+        line.SetTexCoord = function(self, left, right) self._u = { left, right } end
         drawn[#drawn + 1] = line
         return line
     end
@@ -744,8 +746,19 @@ for i, r in ipairs(state.results) do if r.group == "flight" then previewIndex = 
 addon.Panel:Choose(previewIndex)
 check(state.view == "route" and state.plan and shown() == 0 and RouteLines.state.badgesUsed == 0, "a route that is only being looked at is not drawn on the map")
 startTrip()
-check(shown() > 10 and RouteLines.state.linesUsed * 2 == shown() and RouteLines.state.casingsUsed == RouteLines.state.linesUsed,
-    "started, a route on foot is drawn as many short dots, each on a dark casing: " .. shown())
+check(shown() > 0 and RouteLines.state.linesUsed * 2 == shown() and RouteLines.state.casingsUsed == RouteLines.state.linesUsed,
+    "started, a route is drawn as lines, each on a dark casing: " .. shown())
+local tiled, runs = true, 0
+for _, line in ipairs(drawn) do
+    if line._shown then
+        runs = runs + 1
+        if not (line._texture and line._texture:find("Media\\Line", 1, true) and line._wrap == "REPEAT" and line._u and line._u[2] > line._u[1]) then
+            tiled = false
+        end
+    end
+end
+check(tiled, "each a run with its dots or dashes tiled along it from a Media/Line picture")
+check(runs <= 2 * 200, "a few runs, not one per dot: " .. runs)
 check(RouteLines.state.badgesUsed >= 1, "with a marker for the end (and a small square at each step that starts on the map): " .. RouteLines.state.badgesUsed)
 local inside = true
 for _, line in ipairs(drawn) do
@@ -887,7 +900,7 @@ GetPlayerFacing = function() return math.pi / 2 end          -- facing west, the
 addon.Navigator:Show()
 local nw = addon.Navigator.widgets
 check(nw.arrow._shown and math.abs(nw.arrow._rotation + math.pi / 2) < 1e-6, "the arrow points 90 degrees to the right: " .. tostring(nw.arrow._rotation))
-check(nw.arrow._texture and nw.arrow._texture:find("ROTATING-MINIMAPARROW", 1, true), "and uses the theme's arrow: " .. tostring(nw.arrow._texture))
+check(nw.arrow._texture and nw.arrow._texture:find("Media\\Arrow", 1, true), "and uses our own arrow picture: " .. tostring(nw.arrow._texture))
 GetPlayerFacing = nil
 addon.Navigator:Tick()
 check(not nw.arrow._shown, "without a facing there is no arrow")

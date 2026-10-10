@@ -132,21 +132,6 @@ end
 function addon:GetTownName(key) return settlementName(addon.Towns, key, "TOWN_") end
 function addon:GetCityName(key) return settlementName(addon.Cities, key, "CITY_") end
 
--- Tests only.
--- A spell's name and rank text ("Tailoring", "Journeyman"), in the client's language.
--- Rank text is loaded lazily: the first lookup can return a name with no rank, so this
--- asks the client to load the spell data and the caller should look again on
--- SPELL_DATA_LOAD_RESULT. That is why a rank spell showed its tier on the second try.
-function addon:GetSpellLabel(spellID)
-    local info = C_Spell.GetSpellInfo(spellID)
-    local rank = C_Spell.GetSpellSubtext and C_Spell.GetSpellSubtext(spellID)
-    if rank == "" then rank = nil end
-    if (not info or not rank) and C_Spell.RequestLoadSpellData then
-        C_Spell.RequestLoadSpellData(spellID)
-    end
-    return info and info.name, rank
-end
-
 -- A skill spell's name (a weapon skill: "One-Handed Swords", "Staves"), in the client's language, or
 -- nil until the client has loaded it.
 function addon:GetSkillName(spellID)

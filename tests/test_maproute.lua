@@ -1,5 +1,5 @@
 -- A route as lines on the map: which look each kind of travel has, how a plan is cut into pieces on the map
--- that is open, and the dashes and dots along a path. (Drawing them is UI/RouteLines, tested with the UI.)
+-- that is open, and clipping to the minimap. (Drawing them is UI/RouteLines, tested with the UI.)
 useTestDistances()
 addon.World:Build()
 
@@ -12,22 +12,6 @@ check(MapRoute:StyleOf("ship") == "boat" and MapRoute:StyleOf("zeppelin") == "bo
 check(MapRoute:StyleOf("teleport") == "ability" and MapRoute:StyleOf("hearthstone") == "ability" and MapRoute:StyleOf("portal") == "ability", "teleports, the hearthstone and portals too")
 check(MapRoute:StyleOf("nonsense") == "foot", "anything else is on foot")
 check(MapRoute:StyleOf("equip") == "ability", "putting an item on is the player's own ability, like using it")
-
--- Dashes along a path.
-local function line(...) local pts = {} for i = 1, select("#", ...), 2 do pts[#pts + 1] = { x = select(i, ...), y = select(i + 1, ...) } end return pts end
-local dashes = MapRoute.Pattern(line(0, 0, 100, 0), 10, 10)
-check(#dashes == 5, "a 100 long line in 10 on, 10 off makes five dashes: " .. #dashes)
-check(dashes[1][1] == 0 and dashes[1][3] == 10 and dashes[2][1] == 20 and dashes[5][1] == 80 and dashes[5][3] == 90,
-    "at 0-10, 20-30 and so on: the last is " .. dashes[5][1] .. " to " .. dashes[5][3])
-local dots = MapRoute.Pattern(line(0, 0, 0, 90), 2, 7)
-check(#dots == 10 and dots[1][4] == 2 and dots[2][2] == 9, "dots are short dashes, spaced: " .. #dots)
--- Round a corner the dash carries on: 15 along, then 15 up, dashes of 10 with gaps of 10.
-local corner = MapRoute.Pattern(line(0, 0, 15, 0, 15, 15), 10, 10)
-local total = 0
-for _, d in ipairs(corner) do total = total + math.sqrt((d[3] - d[1]) ^ 2 + (d[4] - d[2]) ^ 2) end
-check(math.abs(total - 20) < 1e-6, "the pattern keeps its rhythm round a corner (30 long: 10 on, 10 off, 10 on): " .. total .. " drawn")
-check(#corner == 2 and math.abs(corner[2][2] - 5) < 1e-6 and corner[2][4] == 15, "the second dash starts 5 up the second side, after the rest of the gap")
-check(#MapRoute.Pattern(line(5, 5), 10, 10) == 0 and #MapRoute.Pattern(line(0, 0, 10, 0), 0, 10) == 0, "nothing to draw for a point or a zero dash")
 
 -- Clipping to a round minimap.
 local function near(a, b) return a ~= nil and b ~= nil and math.abs(a - b) < 1e-9 end

@@ -8,10 +8,21 @@ local Options, MinimapLines = addon.Options, addon.MinimapLines
 -- The minimap and what the client tells us about the player.
 local zoom, cvars, facing = 0, { minimapZoom = "0", minimapInsideZoom = "1", rotateMinimap = "0" }, 0
 local playerX, playerY, playerMap = 0.5, 0.5, 1453
-local lines = {}
+local lines, badges = {}, {}
 local function newFrame()
     local f = { _shown = true, _scripts = {} }
     f.SetAllPoints = function() end
+    f.SetScale = function(self, scale) self._scale = scale end
+    f.SetSize = function() end
+    f.ClearAllPoints = function() end
+    f.SetPoint = function(self, _, _, _, x, y) self._x, self._y = x, y end
+    f.CreateTexture = function()
+        local t = {}
+        for _, name in ipairs({ "SetAllPoints", "SetTexture", "SetColorTexture", "SetVertexColor", "SetPoint", "ClearAllPoints" }) do
+            t[name] = function() end
+        end
+        return t
+    end
     f.SetFrameLevel = function() end
     f.RegisterEvent = function() end
     f.SetScript = function(self, name, fn) self._scripts[name] = fn end
@@ -21,7 +32,9 @@ local function newFrame()
     f.CreateLine = function(_, _, layer)
         local line = { _shown = true, _layer = layer }
         line.SetThickness = function(self, t) self._thickness = t end
-        line.SetColorTexture = function(self, r, g, b, a) self._alpha = a end
+        line.SetVertexColor = function(self, r, g, b, a) self._alpha = a end
+        line.SetTexture = function(self, file) self._texture = file end
+        line.SetTexCoord = function(self, left, right) self._u = { left, right } end
         line.SetStartPoint = function(self, _, _, x, y) self._x1, self._y1 = x, y end
         line.SetEndPoint = function(self, _, _, x, y) self._x2, self._y2 = x, y end
         line.Show = function(self) self._shown = true end
@@ -41,7 +54,11 @@ Minimap = {
     GetWidth = function() return 140 end,
     GetFrameLevel = function() return 3 end,
 }
-CreateFrame = newFrame
+CreateFrame = function(...)
+    local f = newFrame(...)
+    badges[#badges + 1] = f
+    return f
+end
 UIParent = newFrame()
 GetCVar = function(name) return cvars[name] end
 GetPlayerFacing = function() return facing end
@@ -61,6 +78,14 @@ local function casings()
     local n = 0
     for _, line in ipairs(lines) do if line._shown and line._layer == "ARTWORK" then n = n + 1 end end
     return n
+end
+-- The markers shown (every frame made after the minimap's own is one), and where, in pixels from the player.
+local function markers()
+    local out = {}
+    for _, badge in ipairs(badges) do
+        if badge._shown and badge._scale then out[#out + 1] = { x = badge._x * badge._scale, y = badge._y * badge._scale } end
+    end
+    return out
 end
 local function extent()
     local minX, maxX, minY, maxY, farthest = 1e9, -1e9, 1e9, -1e9, 0
@@ -91,18 +116,28 @@ check(math.abs(across - 466 - 2 / 3) < 1e-6 and indoors == false, "at the furthe
 
 -- Drawn round the player: 3.33 yards to the pixel on this zoom outdoors, so 170 yards is 51 pixels up.
 MinimapLines:Follow(plan, 1)
-check(#visible() > 5, "the route is drawn as dots: " .. #visible())
+check(#visible() > 0, "the route is drawn: " .. #visible())
+local tiled = true
+for _, line in ipairs(visible()) do
+    if not (line._texture and line._texture:find("LineDot", 1, true) and line._u[2] > line._u[1]) then tiled = false end
+end
+check(tiled, "as dots tiled along it")
+local shownMarkers = markers()
+check(#shownMarkers == 1 and math.abs(shownMarkers[1].x) < 1e-6 and math.abs(shownMarkers[1].y - 51) < 0.5,
+    "with the end marked where the route ends, 51 pixels up: " .. #shownMarkers)
 check(casings() == #visible(), "each on a dark casing")
 local minX, maxX, minY, maxY, farthest = extent()
 check(math.abs(minX) < 1e-6 and math.abs(maxX) < 1e-6, "straight up from the player")
-check(minY >= -0.01 and maxY > 45 and maxY <= 51.01, "as far as the route goes (51 pixels, the last dash ends a little short): " .. maxY)
+check(minY >= -0.01 and maxY > 50 and maxY <= 51.01, "as far as the route goes (51 pixels): " .. maxY)
 check(farthest <= 67 + 1e-6, "never past the rim")
 
 -- The dots stay put on the ground as the player walks: moving north brings the start behind them.
 playerY = 0.45
 MinimapLines:Update()
 minX, maxX, minY, maxY = extent()
-check(math.abs(minY + 25.5) < 0.5 and maxY > 21 and maxY <= 25.51, "walked half way: the route is half behind, half ahead: " .. minY .. " to " .. maxY)
+check(math.abs(minY + 25.5) < 0.5 and maxY > 25 and maxY <= 25.51, "walked half way: the route is half behind, half ahead: " .. minY .. " to " .. maxY)
+local u = visible()[1]._u
+check(u and math.abs(u[1]) < 1e-6, "and its dots stay on the ground: the pattern still starts where the route does")
 playerY = 0.5
 
 -- Turned with the player when the minimap rotates: facing east, north is on their left.
@@ -117,7 +152,9 @@ cvars.rotateMinimap, facing = "0", 0
 local far = { steps = { walk(0.5, 0.0) } }
 MinimapLines:Follow(far, 1)
 minX, maxX, minY, maxY, farthest = extent()
-check(#visible() > 5 and farthest <= 67 + 1e-6 and maxY > 60, "a route past the rim is cut at it: " .. maxY .. " from the centre")
+check(#visible() > 0 and farthest <= 67 + 1e-6 and maxY > 60, "a route past the rim is cut at it: " .. maxY .. " from the centre")
+shownMarkers = markers()
+check(#shownMarkers == 1 and math.abs(shownMarkers[1].y - 67) < 0.5, "and its end waits on the rim, in its direction")
 
 -- The minimap's zoom sets the scale, and indoors it has its own scale.
 MinimapLines:Follow(plan, 1)
