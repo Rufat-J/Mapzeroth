@@ -218,6 +218,16 @@ for i = 1, 12 do longSteps[i] = fakeStep(i) end
 local LAST = #box.steps                       -- how many rows the list has
 addon.Panel:DisplayPlan({ name = "Somewhere far" }, { steps = longSteps, cost = 90 })
 check(box.steps[1].name._text == "Step 1" and box.steps[LAST].name._text == "Step " .. LAST, "the first " .. LAST .. " show")
+-- The bar of how the time splits is the route's own: planning another clears it (seen: the last route's stayed up).
+check(box.split.parts[1]._shown and box.split.styles[1] == "foot", "the bar shows the route's time, all on foot")
+do
+    local realStart = addon.GetPlayerStart
+    addon.GetPlayerStart = function() return nil end          -- planning gets no further than starting
+    addon.Panel:ShowRoute({ name = "Somewhere else" })
+    check(not box.split.parts[1]._shown and box.split.styles[1] == nil, "planning another route empties it")
+    addon.GetPlayerStart = realStart
+end
+addon.Panel:DisplayPlan({ name = "Somewhere far" }, { steps = longSteps, cost = 90 })
 check(box.more._text == ("%d more below"):format(#longSteps - LAST), "and how many are hidden below: " .. tostring(box.more._text))
 addon.Panel:Scroll(1)
 check(box.steps[1].name._text == "Step 2" and box.steps[LAST].name._text == "Step " .. (LAST + 1), "the wheel moves the window: " .. box.steps[1].name._text)

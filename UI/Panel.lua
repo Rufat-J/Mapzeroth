@@ -749,6 +749,7 @@ function Panel:ShowRoute(entry, onReady)
     setStatus(nil)
     ui.routeTitle:SetText(entry.name)
     ui.routeTotal:SetText("")
+    ui.split:SetParts({})
     ui.routeHint:SetText("")
     ui.more:SetText("")
     for _, row in ipairs(ui.steps) do row:Hide() end
