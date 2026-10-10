@@ -1061,7 +1061,9 @@ do
     check(state.view == "edit" and box.editStatus:GetText() == addon.L["PASTE_NONE"], "no stops: not saved, and it says why")
     box.editArea.edit:SetText("/way #1429 41.7 65.6 Goldshire Inn\n/way #1429 84 69 Eastvale")
     box.editName:SetText("  Elwynn loop  ")
+    local plannedBefore = state.plan
     addon.Panel:SaveEditor()
+    check(plannedBefore and state.plan == plannedBefore, "the stops are as they were: the plan it had stays, not planned again")
     check(#MapzerothRebuildDB.routes == 1 and MapzerothRebuildDB.routes[1].name == "Elwynn loop", "Save keeps it, the name trimmed")
     check(state.view == "route" and state.entry.routeID == MapzerothRebuildDB.routes[1].id and box.routeEdit.label:GetText() == addon.L["ROUTE_EDIT"],
         "and plans it: a saved route's view offers Edit")
@@ -1086,7 +1088,7 @@ do
     box.editArea.edit:SetText("/way #1429 41.7 65.6 Goldshire Inn\n/way #1429 84 69 Eastvale\n/way #1429 24.2 74.0 Westbrook")
     addon.Panel:SaveEditor()
     check(#MapzerothRebuildDB.routes == 1 and MapzerothRebuildDB.routes[1].name == "Three stops" and #state.entry.stops == 3,
-        "Save changes it in place, and plans it again")
+        "Save changes it in place, and plans it again (its stops changed)")
 
     -- The pen on a saved route's row opens its editor from the list, without planning it; Save and Cancel go back there.
     local function routeRowIndex()

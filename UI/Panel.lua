@@ -1066,8 +1066,10 @@ function Panel:CloseEditor()
     end
 end
 
--- Saves what is in the editor (a new route, or over the one being edited) and plans it. The lines are saved as read,
--- each with its map, so a line that named none (the player's map) or a zone by name is the same wherever it is used.
+-- Saves what is in the editor (a new route, or over the one being edited) and plans it, unless it was opened from a
+-- planned tour and its stops are as they were (only the name changed): then that plan stays, as there's nothing new
+-- to plan. The lines are saved as read, each with its map, so a line that named none (the player's map) or a zone by
+-- name is the same wherever it is used.
 function Panel:SaveEditor()
     local editing = state.editing
     if not editing then return end
@@ -1084,7 +1086,12 @@ function Panel:SaveEditor()
     ui.editName:ClearFocus()
     ui.editArea.edit:ClearFocus()
     self:RefreshRoutes()
-    if editing.entry then
+    local way = addon.MultiRoute.WayText(points)
+    if editing.entry and editing.plan and #bad == 0 and way == addon.MultiRoute.WayText(editing.entry.points or {}) then
+        ui.editor:Hide()
+        editing.entry.name, editing.entry.routeID = name, id
+        self:DisplayPlan(editing.entry, editing.plan)  -- the same stops: the plan it had
+    elseif editing.entry then
         self:RouteTour(name, points, #bad, id)      -- saved from a route: planned again as saved
     else
         ui.editor:Hide()
