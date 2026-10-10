@@ -31,18 +31,21 @@ local LOOK = {
     ability = { tile = "LineDot", period = 12, thickness = 8 },
 }
 RouteLines.LOOK = LOOK              -- for tests
--- Marker sizes: a step's start is a round dot, a stop or the end a square; where a boat or flight runs off the
--- map (MapRoute's "edge") a ring in its colour; a teleport is a ring with an arrow out of it where it leaves
--- (portOut) and one with an arrow into it where it lands (portIn), in the teleport colour, never a line.
+-- Marker sizes: a step's start is a round dot, a tour stop a rounded square, the end a target; where a boat or
+-- flight runs off the map (MapRoute's "edge") a ring in its colour; a teleport is a ring with an arrow out of it
+-- where it leaves (portOut) and one with an arrow into it where it lands (portIn), in the teleport colour, never a
+-- line. Each is a white picture (Media/, from tools/gen_media.py, drawn for these sizes) tinted, over its own dark
+-- edge picture tinted with the casing colour.
 local MARKER = { step = 7, edge = 14, portOut = 20, portIn = 20, stop = 11, dest = 15 }
--- White pictures, tinted (Media/): a disc; a ring, as its coloured band and the dark edge under it (wider both ways
--- so it shows either side of the band); and the teleport's ring and arrow, each with its own edge.
-local DOT, RING_BAND, RING_EDGE = MEDIA .. "Dot", MEDIA .. "Ring", MEDIA .. "RingEdge"
 local PICTURE = {
-    edge = { RING_BAND, RING_EDGE },
+    step = { MEDIA .. "Step", MEDIA .. "StepEdge" },
+    stop = { MEDIA .. "Stop", MEDIA .. "StopEdge" },
+    dest = { MEDIA .. "Dest", MEDIA .. "DestEdge" },
+    edge = { MEDIA .. "Ring", MEDIA .. "RingEdge" },
     portOut = { MEDIA .. "PortOut", MEDIA .. "PortOutEdge" },
     portIn = { MEDIA .. "PortIn", MEDIA .. "PortInEdge" },
 }
+RouteLines.PICTURE = PICTURE       -- for tests
 local DONE_ALPHA = 0.35            -- steps already done fade
 -- Everything above is for a zone map. A continent or the whole world puts far more ground in the same space, so
 -- lines and markers shrink there to keep from smothering it, by the map's kind (Enum.UIMapType: 0 cosmic,
@@ -51,7 +54,6 @@ local DONE_ALPHA = 0.35            -- steps already done fade
 local SHRINK = { [0] = 0.5, [1] = 0.5, [2] = 0.7 }
 local NO_CASING = { [0] = true, [1] = true }
 local MIN_THICKNESS = 4            -- screen pixels: shrunk below this, a dot is a smudge
-RouteLines.DOT = DOT               -- for tests
 
 local state = { plan = nil, current = nil, lines = {}, linesUsed = 0, casings = {}, casingsUsed = 0, badges = {}, badgesUsed = 0 }
 RouteLines.state = state            -- for tests
@@ -183,21 +185,11 @@ end
 function RouteLines.StyleBadge(badge, marker, current)
     local size = MARKER[marker.kind] or MARKER.step
     badge:SetSize(size, size)
+    local picture = PICTURE[marker.kind] or PICTURE.step
+    badge.fill:SetTexture(picture[1], "CLAMP", "CLAMP", "TRILINEAR")
+    badge.ring:SetTexture(picture[2], "CLAMP", "CLAMP", "TRILINEAR")
     badge.fill:ClearAllPoints()
-    local picture = PICTURE[marker.kind]
-    if picture then
-        badge.fill:SetTexture(picture[1])
-        badge.ring:SetTexture(picture[2])
-        badge.fill:SetAllPoints()
-    else
-        local edge = size >= 10 and 2 or 1.5
-        badge.fill:SetPoint("TOPLEFT", edge, -edge)
-        badge.fill:SetPoint("BOTTOMRIGHT", -edge, edge)
-        local round = marker.kind ~= "stop" and marker.kind ~= "dest"
-        for _, texture in ipairs({ badge.ring, badge.fill }) do
-            if round then texture:SetTexture(DOT) else texture:SetColorTexture(1, 1, 1, 1) end
-        end
-    end
+    badge.fill:SetAllPoints()
     local r, g, b
     local done = false
     if marker.kind == "dest" then
@@ -258,7 +250,7 @@ end
 -- Draw the plan again on the map that is open.
 function RouteLines:Redraw()
     self:Hide()
-    local plan = state.plan
+    local plan = state.plan or state.preview      -- the trip being followed comes first
     if not plan or not addon.Options:Get("showRouteOnMap") then return end
     local map = WorldMapFrame
     if not (map and map.GetMapID and map:IsShown()) then return end
@@ -275,7 +267,7 @@ function RouteLines:Redraw()
 end
 
 -- Follow the trip that has been started: draw its plan, and fade the steps before `current`. nil stops.
--- (A route being looked at, not started, is not drawn: the navigator hands this over as the trip updates.)
+-- (The navigator hands this over as the trip updates. A route only planned on the panel is Preview's.)
 function RouteLines:Follow(plan, current)
     if plan ~= state.plan then
         state.plan, state.current = plan, current
@@ -284,6 +276,14 @@ function RouteLines:Follow(plan, current)
         state.current = current
         self:Redraw()
     end
+end
+
+-- A route planned on the panel but not started: drawn while it is on show there, unless a trip is being followed
+-- (that one is drawn instead). nil takes it down.
+function RouteLines:Preview(plan)
+    if plan == state.preview then return end
+    state.preview = plan
+    if not state.plan then self:Redraw() end
 end
 
 -- Which step the trip is on: earlier ones fade.

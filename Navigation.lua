@@ -132,6 +132,17 @@ function Navigation:Heading(sample, node)
     return turn
 end
 
+-- Between updates, for the arrow: the yards to the current step's destination and which way to turn, read from
+-- where the player is now, on a step on foot (or flying yourself); nil otherwise. Moves nothing on.
+function Navigation:Pointer()
+    if not active or active.finished or active.offRoute then return nil end
+    local step = active.steps[active.index]
+    if not step or kindOf(step.method) ~= "walk" then return nil end
+    local sample = self:Sample()
+    local node = nodeOf(step.nodeID)
+    return distance(sample, node), self:Heading(sample, node)
+end
+
 local function radiusOf(step)
     return kindOf(step.method) == "walk" and WALK_RADIUS or ARRIVE_RADIUS
 end

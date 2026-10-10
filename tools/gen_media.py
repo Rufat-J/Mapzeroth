@@ -115,6 +115,22 @@ RING_R, RING_HALF, MARK_CASE = 5.2, 0.9, 1.0
 PORT_OUT = union(ring(7.5, 10, RING_R, RING_HALF), arrow(7.5, 10, 19.6, 10, 0.9, 4.0))
 PORT_IN = union(ring(12.5, 10, RING_R, RING_HALF), arrow(0.4, 10, 12.5, 10, 0.9, 4.0))
 
+# The other markers, each drawn over the size it shows at (RouteLines' MARKER, in design px): a step's start a dot;
+# a tour stop a rounded square; the end a target (a ring round a dot). Their edges fill in between the target's ring
+# and dot, so it reads on any map art.
+def rounded_square(cx, cy, half, corner):
+    def f(x, y):
+        qx, qy = abs(x - cx) - (half - corner), abs(y - cy) - (half - corner)
+        return math.hypot(max(qx, 0), max(qy, 0)) + min(max(qx, qy), 0) - corner
+    return f
+
+
+MARKERS = {   # name: (design size, shape)
+    "Step": (7, lambda x, y: math.hypot(x - 3.5, y - 3.5) - 2.3),
+    "Stop": (11, rounded_square(5.5, 5.5, 4.0, 1.6)),
+    "Dest": (15, union(ring(7.5, 7.5, 5.0, 1.25), lambda x, y: math.hypot(x - 7.5, y - 7.5) - 1.9)),
+}
+
 # --- The navigator's arrow (256 x 256 over 72 x 72 design px), two-tone, its dark edge baked in ------------------
 CHEVRON = [(36, 8), (61, 61), (36, 48), (11, 61)]
 LEFT_HALF = [(36, 8), (36, 48), (11, 61)]
@@ -127,6 +143,9 @@ def main():
     for name, shape in (("PortOut", PORT_OUT), ("PortIn", PORT_IN)):
         render(name + ".tga", 64, 64, 20, 20, [(shape, 1.0)], aa=0.8)
         render(name + "Edge.tga", 64, 64, 20, 20, [(lambda x, y, f=shape: f(x, y) - MARK_CASE, 1.0)], aa=0.8)
+    for name, (size, shape) in MARKERS.items():
+        render(name + ".tga", 64, 64, size, size, [(shape, 1.0)], aa=0.8)
+        render(name + "Edge.tga", 64, 64, size, size, [(lambda x, y, f=shape: f(x, y) - 1.2, 1.0)], aa=0.8)
     edge = lambda x, y: poly_sdf(x, y, CHEVRON) - 3
     render("Arrow.tga", 256, 256, 72, 72, [
         (edge, 0.06),

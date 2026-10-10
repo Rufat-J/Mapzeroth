@@ -744,7 +744,13 @@ addon.Panel:Query("ironforge flight")
 local previewIndex
 for i, r in ipairs(state.results) do if r.group == "flight" then previewIndex = i end end
 addon.Panel:Choose(previewIndex)
-check(state.view == "route" and state.plan and shown() == 0 and RouteLines.state.badgesUsed == 0, "a route that is only being looked at is not drawn on the map")
+check(state.view == "route" and state.plan and shown() > 0 and RouteLines.state.badgesUsed >= 1, "a route that is planned but not started is drawn on the map")
+check(addon.MinimapLines.state.plan == nil, "but not on the minimap: that is for the trip being followed")
+addon.Panel:Query("")
+check(shown() == 0 and RouteLines.state.badgesUsed == 0, "leaving it for the search page takes it down")
+addon.Panel:Query("ironforge flight")
+addon.Panel:Choose(previewIndex)
+check(shown() > 0, "and choosing it again draws it again")
 startTrip()
 check(shown() > 0 and RouteLines.state.linesUsed * 2 == shown() and RouteLines.state.casingsUsed == RouteLines.state.linesUsed,
     "started, a route is drawn as lines, each on a dark casing: " .. shown())
@@ -802,8 +808,8 @@ local realInfo = C_Map.GetMapInfo
 C_Map.GetMapInfo = function(id) return ({ [1453] = { mapType = 3 }, [13] = { mapType = 2 }, [947] = { mapType = 1 } })[id] end
 check(RouteLines.ShrinkFor(1453) == 1 and RouteLines.ShrinkFor(13) < 1 and RouteLines.ShrinkFor(947) < RouteLines.ShrinkFor(13)
     and RouteLines.ShrinkFor(99999) == 1, "full size on a zone, smaller on a continent, smallest on the world map")
-check(RouteLines.DOT:find("^Interface\\AddOns\\[^\\]+\\Media\\Dot$") ~= nil,
-    "the dot texture's path has its backslashes: " .. RouteLines.DOT)
+check(RouteLines.PICTURE.step[1]:find("^Interface\\AddOns\\[^\\]+\\Media\\Step$") ~= nil,
+    "the marker pictures' paths have their backslashes: " .. RouteLines.PICTURE.step[1])
 check(select(2, RouteLines.ShrinkFor(947)) and not select(2, RouteLines.ShrinkFor(13)), "and the world map's lines have no casing")
 C_Map.GetMapInfo = realInfo
 addon.Navigator:Stop()
@@ -901,6 +907,11 @@ addon.Navigator:Show()
 local nw = addon.Navigator.widgets
 check(nw.arrow._shown and math.abs(nw.arrow._rotation + math.pi / 2) < 1e-6, "the arrow points 90 degrees to the right: " .. tostring(nw.arrow._rotation))
 check(nw.arrow._texture and nw.arrow._texture:find("Media\\Arrow", 1, true), "and uses our own arrow picture: " .. tostring(nw.arrow._texture))
+-- Between updates the arrow turns (and the yards count down) as the player does, without moving the trip on.
+GetPlayerFacing = function() return 0 end                    -- now facing north, straight at it
+addon.Navigator:Point()
+check(math.abs(nw.arrow._rotation) < 1e-6, "turning to face it points the arrow straight ahead, between updates: " .. tostring(nw.arrow._rotation))
+check(nw.status._text and nw.status._text:find("%d"), "and the distance is shown: " .. tostring(nw.status._text))
 GetPlayerFacing = nil
 addon.Navigator:Tick()
 check(not nw.arrow._shown, "without a facing there is no arrow")

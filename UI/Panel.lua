@@ -314,6 +314,8 @@ local function showRouteWidgets(show)
     for _, widget in ipairs({ ui.back, ui.routeTitle, ui.routeTotal, ui.split, ui.routeHint, ui.start, ui.more }) do
         widget:SetShown(show)
     end
+    -- The route on show is drawn on the map once it is planned, started or not (none while it is being planned).
+    addon.RouteLines:Preview(show and state.plan or nil)
     if not show then
         for _, row in ipairs(ui.steps) do row:Hide() end
         ui.tip:Hide()

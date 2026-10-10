@@ -18,6 +18,7 @@ local Navigation = addon.Navigation
 local WIDTH, HEIGHT, PAD = 330, 142, 14
 local INNER = WIDTH - 2 * PAD
 local INTERVAL = 0.5            -- seconds between updates
+local POINTER_INTERVAL = 0.05   -- and between turns of the arrow (and the yards beside it) on foot, in between
 local ARROW = 54                -- the direction arrow, in pixels
 local LINGER = 5                -- seconds "arrived" stays up before the window closes itself
 
@@ -75,9 +76,13 @@ local function build()
     end)
     frame:SetScript("OnUpdate", function(_, elapsed)
         ui.timer = (ui.timer or 0) + elapsed
+        ui.pointerTimer = (ui.pointerTimer or 0) + elapsed
         if ui.timer >= INTERVAL then
-            ui.timer = 0
+            ui.timer, ui.pointerTimer = 0, 0
             Navigator:Tick()
+        elseif ui.pointerTimer >= POINTER_INTERVAL then
+            ui.pointerTimer = 0
+            Navigator:Point()
         end
     end)
     frame:Hide()
@@ -189,7 +194,8 @@ end
 -- Show the current model of the trip.
 function Navigator:Render(model)
     if not ui then return end
-    -- The map and the minimap show the route of the trip that has been started (not what the panel is showing).
+    ui.pointing = false             -- until a step on foot says otherwise
+    -- The map and the minimap show the route of the trip that has been started, over any the panel is previewing.
     local plan = model and not model.finished and not model.replan and Navigation:CurrentPlan() or nil
     local index = model and model.index or nil
     if addon.RouteLines then addon.RouteLines:Follow(plan, index) end
@@ -245,6 +251,7 @@ function Navigator:Render(model)
 
     local status, showBar, showUse = "", false, false
     if model.kind == "walk" then
+        ui.pointing = true          -- Point turns the arrow and counts the yards down between updates
         if model.distance then status = L["NAV_DISTANCE"]:format(math.floor(model.distance + 0.5)) end
     elseif model.kind == "flight" then
         status = model.phase == "flying" and L["NAV_FLYING"] or L["NAV_WAIT_FLIGHT"]
@@ -281,6 +288,15 @@ function Navigator:Render(model)
     if not combat then ui.use:SetShown(showUse) end
     if showUse then configureUse(model.step) end
     addon.Panel:OnTripUpdate(model)
+end
+
+-- Between updates on foot: turn the arrow and count the yards down from where the player is now, nothing else.
+-- (The arrow's showing and the text beside it are laid out by Render; this only changes what it already shows.)
+function Navigator:Point()
+    if not (ui and ui.pointing) then return end
+    local distance, heading = Navigation:Pointer()
+    if heading and ui.arrow:IsShown() then ui.arrow:SetRotation(heading) end
+    if distance then ui.status:SetText(L["NAV_DISTANCE"]:format(math.floor(distance + 0.5))) end
 end
 
 -- One update: read where the player is, move the trip on, redraw.
