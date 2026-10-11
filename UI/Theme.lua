@@ -51,7 +51,7 @@ local BUTTON_ICONS = {
 }
 local STEP_ICONS = {
     walk        = { ICONS .. "Ability_Rogue_Sprint" },
-    taxi        = { "Interface\Minimap\Tracking\FlightMaster", ICONS .. "Spell_Nature_RavenForm" },   -- the flight master's winged boot
+    taxi        = { "Interface\\Minimap\\Tracking\\FlightMaster", ICONS .. "Spell_Nature_RavenForm" },   -- the flight master's winged boot
     fly         = { ICONS .. "Ability_Mount_Gryphon_01", ICONS .. "Spell_Nature_RavenForm" },
     ship        = { ICONS .. "INV_Misc_Anchor", ICONS .. "Spell_Frost_WindWalkOn" },
     zeppelin    = { ICONS .. "INV_Misc_Zeppelin", ICONS .. "INV_Misc_Anchor", ICONS .. "Spell_Frost_WindWalkOn" },

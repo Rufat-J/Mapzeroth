@@ -162,7 +162,7 @@ check(state.plan.cost > 0, "with a time")
 do
     local last = box.steps[#state.plan.steps]
     check(last.iconShown and last.icon._shown and not last.marker._shown, "a step shows an icon, not a chip, by default")
-    check(tostring(last.icon._texture):find("Tracking\FlightMaster", 1, true), "a flight's is the flight master's boot: " .. tostring(last.icon._texture))
+    check(tostring(last.icon._texture):find("Interface\\Minimap\\Tracking\\FlightMaster", 1, true), "a flight's is the flight master's boot: " .. tostring(last.icon._texture))
     check(tostring(box.steps[1].icon._texture):find("Sprint", 1, true), "walking's is Sprint: " .. tostring(box.steps[1].icon._texture))
     addon.Options:Set("stepMarkers", "chip")
     check(not last.iconShown and not last.icon._shown and last.marker._shown, "the setting brings the chips back, live")
