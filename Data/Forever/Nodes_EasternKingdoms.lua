@@ -84,6 +84,20 @@ addon.Nodes.EasternKingdoms = {
     { id = "PORTAL_STORMWIND_DALARAN", container = "easternkingdoms.elwynn_forest.stormwind_wizards_sanctum", mapID = 1453, x = 0.4987, y = 0.8667 }, -- Stormwind: return portal to Dalaran, inside the Wizard's Sanctum (same faction/timing questions as the Dalaran-side portal)
     { id = "ENTRANCE_SW_WIZARDS_SANCTUM_OUTER", container = "easternkingdoms.elwynn_forest", mapID = 1453, x = 0.4944, y = 0.8677, kind = "entrance" }, -- Stormwind: Wizard's Sanctum entrance, outside (captured live)
     { id = "ENTRANCE_SW_WIZARDS_SANCTUM_INNER", container = "easternkingdoms.elwynn_forest.stormwind_wizards_sanctum", mapID = 1453, x = 0.4936, y = 0.8693, kind = "entrance" }, -- Stormwind: Wizard's Sanctum entrance, inside (captured live)
+    -- Undercity is two levels. Its gate opens from Tirisfal into the Ruins of Lordaeron, on the surface; everything
+    -- the city has (flight master, inn, bank, trainers) is underground, down one of three elevators from the ruins.
+    -- The ruins are their own nested container (both on Undercity's map), holding the gate and the three elevator
+    -- tops, so a route in walks from the gate to an elevator and rides it down (Edges.lua), never straight through.
+    -- All eight captured in person (2026-10-10). The gate's two sides are this pair rather than rows in
+    -- tools/poi_source/captured.tsv, because gen_pois.py gives a node its map's container, not the ruins'.
+    { id = "ENTRANCE_UNDERCITY_OUTER", container = "easternkingdoms.tirisfal_glades", mapID = 1420, x = 0.6185, y = 0.6501, kind = "entrance", city = "undercity", area = 153 }, -- Tirisfal: Undercity's gate, outside (Ruins of Lordaeron)
+    { id = "ENTRANCE_UNDERCITY_INNER", container = "easternkingdoms.tirisfal_glades.undercity_ruins", mapID = 1458, x = 0.6617, y = 0.0038, kind = "entrance", city = "undercity" }, -- Undercity: the gate, inside (the ruins, upper level)
+    { id = "UNDERCITY_ELEVATOR_TOP_1", container = "easternkingdoms.tirisfal_glades.undercity_ruins", mapID = 1458, x = 0.6595, y = 0.5028, city = "undercity" }, -- Undercity: south elevator, top
+    { id = "UNDERCITY_ELEVATOR_TOP_2", container = "easternkingdoms.tirisfal_glades.undercity_ruins", mapID = 1458, x = 0.7010, y = 0.4413, city = "undercity" }, -- Undercity: east elevator, top
+    { id = "UNDERCITY_ELEVATOR_TOP_3", container = "easternkingdoms.tirisfal_glades.undercity_ruins", mapID = 1458, x = 0.6177, y = 0.4407, city = "undercity" }, -- Undercity: west elevator, top
+    { id = "UNDERCITY_ELEVATOR_BOTTOM_1", container = "easternkingdoms.tirisfal_glades", mapID = 1458, x = 0.6593, y = 0.5425, city = "undercity" }, -- Undercity: south elevator, bottom
+    { id = "UNDERCITY_ELEVATOR_BOTTOM_2", container = "easternkingdoms.tirisfal_glades", mapID = 1458, x = 0.7274, y = 0.4425, city = "undercity" }, -- Undercity: east elevator, bottom
+    { id = "UNDERCITY_ELEVATOR_BOTTOM_3", container = "easternkingdoms.tirisfal_glades", mapID = 1458, x = 0.5940, y = 0.4402, city = "undercity" }, -- Undercity: west elevator, bottom
     { id = "TRAM_STORMWIND",    container = "easternkingdoms.elwynn_forest",      mapID = 1453, x = 0.6903, y = 0.3110 }, -- Deeprun Tram exterior entrance, Stormwind (captured live)
     { id = "TRAM_IRONFORGE",    container = "easternkingdoms.dun_morogh",         mapID = 1455, x = 0.7641, y = 0.5123 }, -- Deeprun Tram exterior entrance, Ironforge (captured live)
     { id = "DOCK_POWDERFUSE",   container = "easternkingdoms.riverglades",        mapID = 2548, x = 0.7222, y = 0.7603 }, -- Powderfuse Port (ESTIMATED)

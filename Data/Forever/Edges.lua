@@ -142,6 +142,12 @@ for _, edge in ipairs({
     -- across, the way a walled city's own gate is. Reverse is generated automatically.
     { from = "ENTRANCE_SW_WIZARDS_SANCTUM_OUTER", to = "ENTRANCE_SW_WIZARDS_SANCTUM_INNER", method = "walk", cost = 0 },
 
+    -- Undercity's elevators, between the ruins and the city below (Nodes_EasternKingdoms.lua): about 4 s
+    -- moving and 5 s waiting at each end, so 2T + D = 13 s on average. Reverse is generated automatically.
+    { from = "UNDERCITY_ELEVATOR_TOP_1", to = "UNDERCITY_ELEVATOR_BOTTOM_1", method = "walk", cost = 13 },
+    { from = "UNDERCITY_ELEVATOR_TOP_2", to = "UNDERCITY_ELEVATOR_BOTTOM_2", method = "walk", cost = 13 },
+    { from = "UNDERCITY_ELEVATOR_TOP_3", to = "UNDERCITY_ELEVATOR_BOTTOM_3", method = "walk", cost = 13 },
+
     -- Rut'theran <-> Darnassus: bidirectional, both ends captured live. Not a
     -- real portal (nothing to interact with) -- just walking into a zone
     -- trigger, so it's method "transition", no faction requirement, and one

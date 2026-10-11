@@ -5,14 +5,15 @@ local addonName, addon = ...
 -- and the same markers: where steps start, teleports, stops and the end), smaller, drawn round the player. Lines and
 -- markers are drawn with RouteLines' own pieces (textured runs, badges).
 --
--- The minimap is a round window on the world, centred on the player, north up unless the player has set it
--- to rotate. How many yards it spans depends on its zoom and on whether the player is indoors (the client
+-- The minimap is a window on the world, centred on the player, north up unless the player has set it to rotate:
+-- round, unless a minimap addon has made it square or square in some corners (it says so through the global
+-- GetMinimapShape(), as minimap buttons read it). How many yards it spans depends on its zoom and on whether the player is indoors (the client
 -- has separate zoom scales for each, and no call to ask which, so it is found by nudging the zoom and seeing
 -- which of its two settings follows, falling back to IsIndoors()). Each piece of the route is worked out in yards on the
 -- map the player is on, with how far along it each point is (so the dots stay put on the ground as the player
 -- moves), and every 0.1 s its runs are shifted to the player, turned if the minimap rotates, scaled to pixels
--- and clipped to the circle. A marker past the rim isn't shown, except the end, which waits on the rim in its
--- direction. It draws nothing if the client can't do this (IsAvailable), or the setting is
+-- and clipped to its shape. A marker past the rim isn't shown (the navigator's arrow already points the way).
+-- It draws nothing if the client can't do this (IsAvailable), or the setting is
 -- off. Colours come from the theme.
 
 local MinimapLines = {}
@@ -187,6 +188,9 @@ local function draw(frame)
     local width = Minimap:GetWidth()
     if not width or width <= 0 then return end
     local radius = width / 2 - MARGIN
+    -- Round unless a minimap addon has made it square (or square in some corners) and says so.
+    local shape = type(GetMinimapShape) == "function" and GetMinimapShape() or "ROUND"
+    local quarters = MapRoute.MINIMAP_SHAPES[shape] or MapRoute.MINIMAP_SHAPES.ROUND
     local ypp = yardsAcross() / width
     local built = state.built
     if not built or built.mapID ~= mapID or built.plan ~= state.plan then rebuild(mapID) end
@@ -217,24 +221,22 @@ local function draw(frame)
             local p, q = piece.points[i], piece.points[i + 1]
             local ax, ay = toPixels(p.x, p.y)
             local bx, by = toPixels(q.x, q.y)
-            local x1, y1, x2, y2 = MapRoute.ClipCircle(ax, ay, bx, by, radius)
-            if x1 and (bx ~= ax or by ~= ay) then
-                -- Where the clipped run starts and ends along the line, in pixels, so the pattern stays on the ground.
-                local start = p.along / ypp
-                local from = start + math.sqrt((x1 - ax) ^ 2 + (y1 - ay) ^ 2)
-                local to = start + math.sqrt((x2 - ax) ^ 2 + (y2 - ay) ^ 2)
-                run(frame, look, x1, y1, x2, y2, from, to, thickness, r, g, b, alpha)
+            if bx ~= ax or by ~= ay then
+                for _, part in ipairs(MapRoute.ClipShape(ax, ay, bx, by, radius, quarters)) do
+                    -- Where the clipped run starts and ends along the line, in pixels, so the pattern stays on the ground.
+                    local x1, y1, x2, y2 = part[1], part[2], part[3], part[4]
+                    local start = p.along / ypp
+                    local from = start + math.sqrt((x1 - ax) ^ 2 + (y1 - ay) ^ 2)
+                    local to = start + math.sqrt((x2 - ax) ^ 2 + (y2 - ay) ^ 2)
+                    run(frame, look, x1, y1, x2, y2, from, to, thickness, r, g, b, alpha)
+                end
             end
         end
     end
 
     for _, marker in ipairs(state.markers) do
         local x, y = toPixels(marker.x, marker.y)
-        local distance = math.sqrt(x * x + y * y)
-        if distance > radius and marker.kind == "dest" then
-            x, y, distance = x / distance * radius, y / distance * radius, radius
-        end
-        if distance <= radius then
+        if MapRoute.InsideShape(x, y, radius, quarters) then
             local badge = acquireBadge(frame)
             badge:SetScale(unit * SCALE)
             badge:ClearAllPoints()

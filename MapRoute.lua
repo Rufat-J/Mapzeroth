@@ -120,6 +120,80 @@ function MapRoute.ClipCircle(x1, y1, x2, y2, radius)
     return x1 + dx * low, y1 + dy * low, x1 + dx * high, y1 + dy * high
 end
 
+-- The part of a segment inside the square of half-width `half` about the origin, or nil.
+local function clipSquare(x1, y1, x2, y2, half)
+    local dx, dy = x2 - x1, y2 - y1
+    local low, high = 0, 1
+    for _, edge in ipairs({ { -dx, x1 + half }, { dx, half - x1 }, { -dy, y1 + half }, { dy, half - y1 } }) do
+        local p, q = edge[1], edge[2]
+        if p == 0 then
+            if q < 0 then return nil end
+        else
+            local t = q / p
+            if p < 0 then low = math.max(low, t) else high = math.min(high, t) end
+        end
+    end
+    if low >= high then return nil end
+    return x1 + dx * low, y1 + dy * low, x1 + dx * high, y1 + dy * high
+end
+
+-- Minimap shapes, by what GetMinimapShape() says (the global minimap addons define; none means round): for each
+-- quarter whether it is round (true) or square, in LibDBIcon's order: 1 east-south, 2 west-south, 3 east-north,
+-- 4 west-north.
+MapRoute.MINIMAP_SHAPES = {
+    ROUND = { true, true, true, true },
+    SQUARE = { false, false, false, false },
+    ["CORNER-TOPLEFT"] = { false, false, false, true },
+    ["CORNER-TOPRIGHT"] = { false, false, true, false },
+    ["CORNER-BOTTOMLEFT"] = { false, true, false, false },
+    ["CORNER-BOTTOMRIGHT"] = { true, false, false, false },
+    ["SIDE-LEFT"] = { false, true, false, true },
+    ["SIDE-RIGHT"] = { true, false, true, false },
+    ["SIDE-TOP"] = { false, false, true, true },
+    ["SIDE-BOTTOM"] = { true, true, false, false },
+    ["TRICORNER-TOPLEFT"] = { false, true, true, true },
+    ["TRICORNER-TOPRIGHT"] = { true, false, true, true },
+    ["TRICORNER-BOTTOMLEFT"] = { true, true, false, true },
+    ["TRICORNER-BOTTOMRIGHT"] = { true, true, true, false },
+}
+
+local function quarter(x, y)
+    local q = 1
+    if x < 0 then q = q + 1 end
+    if y > 0 then q = q + 2 end
+    return q
+end
+
+-- Whether a point (east, north of the centre) is inside a minimap of `radius` and shape `quarters`
+-- (MINIMAP_SHAPES' lists).
+function MapRoute.InsideShape(x, y, radius, quarters)
+    if quarters[quarter(x, y)] then return x * x + y * y <= radius * radius end
+    return math.abs(x) <= radius and math.abs(y) <= radius
+end
+
+-- The parts of a segment inside a minimap of `radius` and shape `quarters`: { { x1, y1, x2, y2 }, ... } (the
+-- segment is cut where it crosses from one quarter to another, and each part clipped to its quarter's shape).
+function MapRoute.ClipShape(x1, y1, x2, y2, radius, quarters)
+    local dx, dy = x2 - x1, y2 - y1
+    local cuts = { 0, 1 }
+    if dx ~= 0 and (x1 < 0) ~= (x2 < 0) then cuts[#cuts + 1] = -x1 / dx end
+    if dy ~= 0 and (y1 > 0) ~= (y2 > 0) then cuts[#cuts + 1] = -y1 / dy end
+    table.sort(cuts)
+    local out = {}
+    for i = 1, #cuts - 1 do
+        local a, b = cuts[i], cuts[i + 1]
+        if b > a then
+            local ax, ay, bx, by = x1 + dx * a, y1 + dy * a, x1 + dx * b, y1 + dy * b
+            local round = quarters[quarter((ax + bx) / 2, (ay + by) / 2)]
+            local cx1, cy1, cx2, cy2
+            if round then cx1, cy1, cx2, cy2 = MapRoute.ClipCircle(ax, ay, bx, by, radius)
+            else cx1, cy1, cx2, cy2 = clipSquare(ax, ay, bx, by, radius) end
+            if cx1 then out[#out + 1] = { cx1, cy1, cx2, cy2 } end
+        end
+    end
+    return out
+end
+
 -- A vector (east, north) turned counter-clockwise by `angle` radians.
 function MapRoute.Rotate(east, north, angle)
     local cos, sin = math.cos(angle), math.sin(angle)

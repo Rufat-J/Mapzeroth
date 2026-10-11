@@ -84,3 +84,25 @@ local dalaran = addon.Pathfinder:FindPath(graph, dalaranDock.id, alterac.id)
 local touchesGate = false
 for _, step in ipairs(dalaran.steps) do if step.to:find("^ENTRANCE") then touchesGate = true end end
 check(dalaran and not touchesGate, "Dalaran, not enclosed, is walked straight")
+
+-- Undercity is two levels: its gate opens into the ruins on the surface, and the city (its flight master) is down an
+-- elevator. A route in walks from the gate to an elevator top, rides down, and walks on; never straight from the gate.
+local horde = TravelGraph:Build(makeCtx({ faction = "Horde" }))
+local function hordeEdge(from, to)
+    for _, step in ipairs(horde.adjacency[from] or {}) do if step.to == to and step.method == "walk" then return step end end
+end
+check(not hordeEdge("ENTRANCE_UNDERCITY_INNER", "TAXI_11"), "no walk from Undercity's gate straight to its flight master")
+for i = 1, 3 do
+    check(hordeEdge("ENTRANCE_UNDERCITY_INNER", "UNDERCITY_ELEVATOR_TOP_" .. i), "the gate leads to elevator " .. i .. " in the ruins")
+    local down = hordeEdge("UNDERCITY_ELEVATOR_TOP_" .. i, "UNDERCITY_ELEVATOR_BOTTOM_" .. i)
+    check(down and down.cost == 13, "elevator " .. i .. " rides down in 13 s")
+end
+local ride = hordeEdge("UNDERCITY_ELEVATOR_TOP_2", "UNDERCITY_ELEVATOR_BOTTOM_2")
+check(ride and ride.cost == 13 and hordeEdge("UNDERCITY_ELEVATOR_BOTTOM_2", "UNDERCITY_ELEVATOR_TOP_2").cost == 13,
+    "an elevator ride is 13 s either way")
+local intoUndercity = addon.Pathfinder:FindPath(horde, "ZEPPELIN_TIRISFAL_ORGRIMMAR", "TAXI_11")
+local ucVia = {}
+for _, step in ipairs(intoUndercity.steps) do ucVia[#ucVia + 1] = step.to end
+local ucPath = table.concat(ucVia, ">")
+check(ucPath:find("ENTRANCE_UNDERCITY_OUTER>ENTRANCE_UNDERCITY_INNER>UNDERCITY_ELEVATOR_TOP_%d>UNDERCITY_ELEVATOR_BOTTOM_%d>TAXI_11$"),
+    "from the zeppelin tower to the flight master: the gate, the ruins, an elevator down: " .. ucPath)

@@ -13,6 +13,21 @@ check(MapRoute:StyleOf("teleport") == "ability" and MapRoute:StyleOf("hearthston
 check(MapRoute:StyleOf("nonsense") == "foot", "anything else is on foot")
 check(MapRoute:StyleOf("equip") == "ability", "putting an item on is the player's own ability, like using it")
 
+-- Clipping to a minimap of another shape: square in some quarters (MINIMAP_SHAPES, in LibDBIcon's order).
+do
+    local shapes = MapRoute.MINIMAP_SHAPES
+    check(MapRoute.InsideShape(9, 9, 10, shapes.SQUARE) and not MapRoute.InsideShape(9, 9, 10, shapes.ROUND),
+        "a corner point is inside a square minimap, not a round one")
+    check(MapRoute.InsideShape(9, 9, 10, shapes["CORNER-BOTTOMLEFT"]) and not MapRoute.InsideShape(-9, -9, 10, shapes["CORNER-BOTTOMLEFT"]),
+        "CORNER-BOTTOMLEFT is round only at the bottom left")
+    local parts = MapRoute.ClipShape(0, 0, 20, 20, 10, shapes.SQUARE)
+    check(#parts == 1 and parts[1][3] == 10 and parts[1][4] == 10, "a diagonal out of a square stops at its corner")
+    parts = MapRoute.ClipShape(-20, 5, 20, 5, 10, shapes["SIDE-LEFT"])     -- round on the left, square on the right
+    check(#parts == 2 and math.abs(parts[1][1] + math.sqrt(75)) < 1e-9 and parts[2][3] == 10,
+        "a line across a half-round one is cut at the circle on the round side and the edge on the square side")
+    check(#MapRoute.ClipShape(20, 20, 30, 30, 10, shapes.SQUARE) == 0, "nothing of a segment outside it")
+end
+
 -- Clipping to a round minimap.
 local function near(a, b) return a ~= nil and b ~= nil and math.abs(a - b) < 1e-9 end
 local x1, y1, x2, y2 = MapRoute.ClipCircle(-3, 0, 3, 0, 10)

@@ -153,8 +153,23 @@ local far = { steps = { walk(0.5, 0.0) } }
 MinimapLines:Follow(far, 1)
 minX, maxX, minY, maxY, farthest = extent()
 check(#visible() > 0 and farthest <= 67 + 1e-6 and maxY > 60, "a route past the rim is cut at it: " .. maxY .. " from the centre")
-shownMarkers = markers()
-check(#shownMarkers == 1 and math.abs(shownMarkers[1].y - 67) < 0.5, "and its end waits on the rim, in its direction")
+check(#markers() == 0, "and its end, out of sight, isn't shown (the navigator's arrow points the way)")
+
+-- A minimap addon can make it square (saying so through GetMinimapShape): a route toward a corner then runs on
+-- past where the circle would end, to the square's edge.
+local function corner() return { steps = { { method = "walk", path = { { mapID = 1453, x = 0.5, y = 0.5 }, { mapID = 1453, x = 0.6, y = 0.4 } } } } } end
+MinimapLines:Follow(corner(), 1)
+minX, maxX, minY, maxY, farthest = extent()
+check(farthest <= 67 + 1e-6, "round: a route toward the corner stops at the rim: " .. farthest)
+GetMinimapShape = function() return "SQUARE" end
+MinimapLines:Update()
+minX, maxX, minY, maxY, farthest = extent()
+check(farthest > 67 + 1 and maxX <= 67 + 1e-6 and maxY <= 67 + 1e-6, "square: it reaches into the corner, never past the edge: " .. farthest)
+GetMinimapShape = function() return "CORNER-TOPRIGHT" end        -- round only at the top right, where the route goes
+MinimapLines:Update()
+minX, maxX, minY, maxY, farthest = extent()
+check(farthest <= 67 + 1e-6, "a shape round in that corner stops at the rim again")
+GetMinimapShape = nil
 
 -- The minimap's zoom sets the scale, and indoors it has its own scale.
 MinimapLines:Follow(plan, 1)
