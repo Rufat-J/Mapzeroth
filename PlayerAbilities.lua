@@ -65,13 +65,32 @@ local function hasToy(itemID)
     return true
 end
 
+-- In combat the client hands back cooldown numbers as "secret" values that tainted code can't
+-- compare or add. So each readable answer is remembered as the time the cooldown ends, and a
+-- secret answer falls back to the last one remembered (none remembered: taken as ready).
+local function isSecret(value)
+    return issecretvalue ~= nil and issecretvalue(value) and true or false
+end
+
+local spellReadyAt, itemReadyAt = {}, {}
+
+local function remembered(readyAt, id)
+    return math.max(0, (readyAt[id] or 0) - GetTime())
+end
+
 -- Seconds until a spell can be used again (0 when ready).
 local function cooldownRemaining(spellID)
     local info = C_Spell and C_Spell.GetSpellCooldown and C_Spell.GetSpellCooldown(spellID)
-    if not info or not info.startTime or info.startTime == 0 then return 0 end
+    if not info then return 0 end
+    local start, duration = info.startTime, info.duration
+    if isSecret(start) or isSecret(duration) then return remembered(spellReadyAt, spellID) end
     -- The global cooldown isn't a real cooldown.
-    if info.duration <= 1.5 then return 0 end
-    return math.max(0, info.startTime + info.duration - GetTime())
+    if not start or start == 0 or not duration or duration <= 1.5 then
+        spellReadyAt[spellID] = nil
+        return 0
+    end
+    spellReadyAt[spellID] = start + duration
+    return math.max(0, start + duration - GetTime())
 end
 
 -- Seconds until an ITEM can be used again (0 when ready). Items don't share the spell
@@ -84,7 +103,12 @@ local function itemCooldownRemaining(itemID)
     elseif GetItemCooldown then
         start, duration = GetItemCooldown(itemID)
     end
-    if not start or start == 0 or not duration or duration <= 1.5 then return 0 end
+    if isSecret(start) or isSecret(duration) then return remembered(itemReadyAt, itemID) end
+    if not start or start == 0 or not duration or duration <= 1.5 then
+        itemReadyAt[itemID] = nil
+        return 0
+    end
+    itemReadyAt[itemID] = start + duration
     return math.max(0, start + duration - GetTime())
 end
 
