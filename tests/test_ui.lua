@@ -397,11 +397,31 @@ addon.OptionsPanel.Open = function() opened = opened + 1 return true end
 mb.button._scripts.OnClick(mb.button, "RightButton")
 addon.OptionsPanel.Open = realOpen
 check(opened == 1, "right-click opens the settings")
+-- The addon compartment lists us only while the button is hidden, so the two never show at once.
+local redraws = 0
+AddonCompartmentFrame = {
+    registeredAddons = {},
+    RegisterAddon = function(self, info) table.insert(self.registeredAddons, info) end,
+    UpdateDisplay = function() redraws = redraws + 1 end,
+}
+table.insert(AddonCompartmentFrame.registeredAddons, { text = "Someone else" })
+local function inCompartment()
+    for _, info in ipairs(AddonCompartmentFrame.registeredAddons) do
+        if info.text == addon.L["PANEL_TITLE"] then return true end
+    end
+    return false
+end
+mb:SyncCompartment()
 check(addon.Options:Get("hideMinimapButton") == false and mb.button:IsShown(), "the button shows by default")
+check(not inCompartment(), "and the compartment doesn't list us then")
 addon.Options:Set("hideMinimapButton", true)
 check(not mb.button:IsShown(), "the Hide Minimap Button setting hides it")
+check(inCompartment() and #AddonCompartmentFrame.registeredAddons == 2, "and lists us in the compartment instead")
 addon.Options:Set("hideMinimapButton", false)
 check(mb.button:IsShown(), "and turning it off brings it back")
+check(not inCompartment() and #AddonCompartmentFrame.registeredAddons == 1 and redraws == 1,
+    "and takes us out of the compartment, leaving the others")
+AddonCompartmentFrame = nil
 addon.Panel:SetDocked(true)
 
 -- Route view: no waypoint, a Start button, and choosing does the pricing.

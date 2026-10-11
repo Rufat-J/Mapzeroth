@@ -84,7 +84,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
         addon.OptionsPanel:Register()
         addon.Panel:Init()
         addon.MinimapButton:Init()
-        addon.MinimapButton:AddToCompartment()
+        addon.MinimapButton:SyncCompartment()
         -- Which flight was chosen: the navigator wants to know where it goes (a post-hook: it changes nothing).
         if type(TakeTaxiNode) == "function" and not addon.takeTaxiHooked then
             addon.takeTaxiHooked = true

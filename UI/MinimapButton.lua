@@ -98,9 +98,10 @@ function MinimapButton:Tooltip(owner)
     Theme:ShowTooltip(owner or button, lines)
 end
 
--- Shown unless the player has hidden it (Options).
+-- Shown unless the player has hidden it (Options); then it is in the addon compartment instead.
 function MinimapButton:Apply()
     if button then button:SetShown(not addon.Options:Get("hideMinimapButton")) end
+    self:SyncCompartment()
 end
 
 -- Builds the button (once). False where there is no minimap to put it on.
@@ -125,14 +126,12 @@ function MinimapButton:Init()
     return true
 end
 
--- The same two clicks from the addon compartment (the minimap's addon list), for players who hide minimap buttons.
--- Registered from here rather than the .toc, so the icon's path follows this addon's folder name. Once; nothing where
--- the client has no compartment.
-local compartmentAdded = false
-function MinimapButton:AddToCompartment()
-    if compartmentAdded or not (AddonCompartmentFrame and AddonCompartmentFrame.RegisterAddon) then return false end
-    compartmentAdded = true
-    AddonCompartmentFrame:RegisterAddon({
+-- The same two clicks from the addon compartment (the minimap's addon list), for players who hide the minimap button:
+-- it is listed there only while the button is hidden, so the two never show at once. Registered from here rather than
+-- the .toc, so the icon's path follows this addon's folder name. Nothing where the client has no compartment.
+local compartmentEntry
+local function entry()
+    compartmentEntry = compartmentEntry or {
         text = L["PANEL_TITLE"],
         icon = ICON,
         notCheckable = true,
@@ -142,6 +141,25 @@ function MinimapButton:AddToCompartment()
         end,
         funcOnEnter = function(owner) if owner then MinimapButton:Tooltip(owner) end end,
         funcOnLeave = function(owner) if owner then Theme:HideTooltip(owner) end end,
-    })
-    return true
+    }
+    return compartmentEntry
+end
+
+local compartmentAdded = false
+function MinimapButton:SyncCompartment()
+    local frame = AddonCompartmentFrame
+    if not (frame and frame.RegisterAddon) then return false end
+    local want = addon.Options:Get("hideMinimapButton") and true or false
+    if want and not compartmentAdded then
+        frame:RegisterAddon(entry())
+        compartmentAdded = true
+    elseif not want and compartmentAdded and type(frame.registeredAddons) == "table" then
+        -- The compartment has no unregister; take our entry out of its list and redraw (what LibDBIcon does).
+        for i, registered in ipairs(frame.registeredAddons) do
+            if registered == compartmentEntry then table.remove(frame.registeredAddons, i) break end
+        end
+        if frame.UpdateDisplay then frame:UpdateDisplay() end
+        compartmentAdded = false
+    end
+    return compartmentAdded
 end
