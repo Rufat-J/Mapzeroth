@@ -7,6 +7,8 @@ Each row is one guessed crossing point, seen from both sides.
 |---|---|---|---|
 | Durotar | 34.9, 43.4 | The Barrens | 62.3, 18.7 |
 | Mulgore | 67.2, 62.1 | The Barrens | 41.8, 58.9 |
+| Mulgore | 41.3, 12.8 | Stonetalon Mountains | 67.9, 97.5 |
+| Mulgore | 31.1, 23.2 | Desolace | 81.5, 37.9 |
 | The Barrens | 36.2, 27.8 | Stonetalon Mountains | 87.6, 96.1 |
 | The Barrens | 48.2, 10.3 | Ashenvale | 68.0, 88.5 |
 | The Barrens | 42.0, 94.5 | Thousand Needles | 31.9, 22.3 |
@@ -55,6 +57,6 @@ Each row is one guessed crossing point, seen from both sides.
 | Hillsbrad Foothills | 53.7, 8.1 | Alterac Mountains | 53.6, 93.3 |
 | Hinterlands | 23.6, 26.2 | Western Plaguelands | 67.6, 87.4 | 
 | Alterac Mountains | 80.2, 30.9 | Western Plaguelands | 43.2, 93.8 |
-| Silverpine Forest | 68.1, 4.3 | Tirisfal Glades | 51.0, 73.6 |
+| Silverpine Forest | 67.8, 4.9 | Tirisfal Glades | 53.9, 76.4 |
 | Tirisfal Glades | 85.1, 69.8 | Western Plaguelands | 20.4, 57.2 |
 | Western Plaguelands | 75.5, 49.9 | Eastern Plaguelands | 9.4, 72.5 |

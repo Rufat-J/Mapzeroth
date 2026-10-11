@@ -15,14 +15,12 @@ kalimdor:
    33 cells  Darkshore <-> Felwood
    22 cells  Dustwallow Marsh <-> Thousand Needles
    20 cells  Felwood <-> Mount Hyjal
-   19 cells  Desolace <-> Mulgore
    16 cells  Azshara <-> Winterspring
    15 cells  Feralas <-> Silithus
    13 cells  Darkshore <-> Moonglade
    11 cells  Feralas <-> Shen'dralas
    10 cells  Feralas <-> Mulgore
     8 cells  Mulgore <-> Shen'dralas
-    7 cells  Mulgore <-> Stonetalon Mountains
     3 cells  Thousand Needles <-> Un'Goro Crater
     2 cells  Ashenvale <-> Durotar
 easternkingdoms:
@@ -50,6 +48,12 @@ Every node and crossing written:
   BORDER_MULGORE_TO_THE_BARRENS: Mulgore side of the Mulgore/The Barrens crossing
   BORDER_THE_BARRENS_TO_MULGORE: The Barrens side of the The Barrens/Mulgore crossing
   crossing BORDER_MULGORE_TO_THE_BARRENS -> BORDER_THE_BARRENS_TO_MULGORE: Mulgore <-> The Barrens
+  BORDER_MULGORE_TO_STONETALON_MOUNTAINS: Mulgore side of the Mulgore/Stonetalon Mountains crossing
+  BORDER_STONETALON_MOUNTAINS_TO_MULGORE: Stonetalon Mountains side of the Stonetalon Mountains/Mulgore crossing
+  crossing BORDER_MULGORE_TO_STONETALON_MOUNTAINS -> BORDER_STONETALON_MOUNTAINS_TO_MULGORE: Mulgore <-> Stonetalon Mountains
+  BORDER_MULGORE_TO_DESOLACE: Mulgore side of the Mulgore/Desolace crossing
+  BORDER_DESOLACE_TO_MULGORE: Desolace side of the Desolace/Mulgore crossing
+  crossing BORDER_MULGORE_TO_DESOLACE -> BORDER_DESOLACE_TO_MULGORE: Mulgore <-> Desolace
   BORDER_THE_BARRENS_TO_STONETALON_MOUNTAINS: The Barrens side of the The Barrens/Stonetalon Mountains crossing
   BORDER_STONETALON_MOUNTAINS_TO_THE_BARRENS: Stonetalon Mountains side of the Stonetalon Mountains/The Barrens crossing
   crossing BORDER_THE_BARRENS_TO_STONETALON_MOUNTAINS -> BORDER_STONETALON_MOUNTAINS_TO_THE_BARRENS: The Barrens <-> Stonetalon Mountains
