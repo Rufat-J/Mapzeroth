@@ -109,6 +109,24 @@ N:Start(entry, ship)
 N:Update(at("TAXI_2", 0.004, 0, { now = 0 }))
 check(N:Update(at("PORTAL_STORMWIND_DALARAN", 0.004, 0, { now = 30 })).finished, "arriving without having been seen to leave still ends it")
 
+-- Once underway, a zeppelin is timed by its ride alone: the step's 300 s is the plan's average, wait included.
+local zeppelin = { steps = { step("zeppelin", "TAXI_2", "PORTAL_STORMWIND_DALARAN", 300, { ride = 120 }) } }
+N:Start(entry, zeppelin)
+N:Update(at("TAXI_2", 0.004, 0, { now = 0 }))
+N:Update(at("TAXI_2", -0.1, 0, { now = 10 }))           -- left the dock
+m = N:Update({ now = 70, onTaxi = false })                -- out of sight at sea: by time
+check(math.abs(m.progress - 0.5) < 1e-9, "60 s into a 120 s ride is half the bar: " .. tostring(m.progress))
+check(math.abs(m.remaining - 60) < 1e-6 and not m.overrun, "60 s left, not the rest of the 300: " .. tostring(m.remaining))
+local count = #timed
+N:Update(at("PORTAL_STORMWIND_DALARAN", 0.004, 0, { now = 135 }))
+check(#timed == count + 1 and timed[#timed].planned == 120, "the measured ride is compared with the ride")
+
+for _, edge in ipairs(addon.Edges or {}) do
+    if edge.ride then
+        check(edge.cost and edge.ride <= edge.cost, "a ride can't take longer than the wait and ride together: " .. edge.from)
+    end
+end
+
 -- A hearthstone lands at the bind point, which can be well away from the inn node we have for
 -- it: the sudden move is what ends the step, not arriving at the node.
 local hearth = { steps = { step("hearthstone", "YOU", "TAXI_4", 25, { itemID = 6948 }), step("walk", "TAXI_4", "TAXI_8", 60) } }

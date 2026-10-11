@@ -81,7 +81,10 @@ table.insert(addon.Edges, {
 -- (see the block below).
 --
 -- Shuttle-boat costs use the average 2T + D (T = transit, D = dock time);
--- loops use C/2 + ride time. Both exclude loading tax.
+-- loops use C/2 + ride time. Both exclude loading tax. `ride` is the time
+-- aboard alone (T, or the loop's ride): the navigator times the trip once
+-- underway by it, not by the cost, which includes the wait. Placeholders
+-- leave it out and are timed by their cost.
 --
 -- Deeprun Tram now uses real exterior-entrance nodes (TRAM_STORMWIND /
 -- TRAM_IRONFORGE), captured live; see the edge below.
@@ -89,7 +92,7 @@ table.insert(addon.Edges, {
 
 for _, edge in ipairs({
     -- Ships
-    { from = "DOCK_STORMWIND", to = "DOCK_AUBERDINE_STORMWIND", method = "ship", cost = 170, loadingScreens = 1, requirements = { faction = "Alliance" } }, -- new in Forever; T = 55, D = 60 -> 2T + D = 170, crosses continents so one loading screen
+    { from = "DOCK_STORMWIND", to = "DOCK_AUBERDINE_STORMWIND", method = "ship", cost = 170, ride = 55, loadingScreens = 1, requirements = { faction = "Alliance" } }, -- new in Forever; T = 55, D = 60 -> 2T + D = 170, crosses continents so one loading screen
 
     -- Auberdine -> Menethil -> Southshore -> Auberdine: one-directional LOOP,
     -- all live-measured, D = 60 at every stop. This replaced the old direct
@@ -102,18 +105,18 @@ for _, edge in ipairs({
     -- visits X then Y = C/2 + ride time from X to Y (ride includes the 60s
     -- dock at any stop you stay aboard through). One edge per ordered pair so
     -- staying aboard doesn't get charged a second wait.
-    { from = "DOCK_AUBERDINE_MENETHIL", to = "DOCK_MENETHIL", method = "ship", cost = 293, loadingScreens = 1, oneway = true, requirements = { faction = "Alliance" } }, -- ride 65
-    { from = "DOCK_MENETHIL", to = "DOCK_SOUTHSHORE", method = "ship", cost = 363, loadingScreens = 0, oneway = true, requirements = { faction = "Alliance" } }, -- ride 135
-    { from = "DOCK_SOUTHSHORE", to = "DOCK_AUBERDINE_MENETHIL", method = "ship", cost = 303, loadingScreens = 1, oneway = true, requirements = { faction = "Alliance" } }, -- ride 75
-    { from = "DOCK_AUBERDINE_MENETHIL", to = "DOCK_SOUTHSHORE", method = "ship", cost = 488, loadingScreens = 1, oneway = true, requirements = { faction = "Alliance" } }, -- via Menethil, ride 65 + 60 + 135
-    { from = "DOCK_MENETHIL", to = "DOCK_AUBERDINE_MENETHIL", method = "ship", cost = 498, loadingScreens = 1, oneway = true, requirements = { faction = "Alliance" } }, -- via Southshore, ride 135 + 60 + 75
-    { from = "DOCK_SOUTHSHORE", to = "DOCK_MENETHIL", method = "ship", cost = 428, loadingScreens = 2, oneway = true, requirements = { faction = "Alliance" } }, -- via Auberdine, ride 75 + 60 + 65
+    { from = "DOCK_AUBERDINE_MENETHIL", to = "DOCK_MENETHIL", method = "ship", cost = 293, ride = 65, loadingScreens = 1, oneway = true, requirements = { faction = "Alliance" } }, -- ride 65
+    { from = "DOCK_MENETHIL", to = "DOCK_SOUTHSHORE", method = "ship", cost = 363, ride = 135, loadingScreens = 0, oneway = true, requirements = { faction = "Alliance" } }, -- ride 135
+    { from = "DOCK_SOUTHSHORE", to = "DOCK_AUBERDINE_MENETHIL", method = "ship", cost = 303, ride = 75, loadingScreens = 1, oneway = true, requirements = { faction = "Alliance" } }, -- ride 75
+    { from = "DOCK_AUBERDINE_MENETHIL", to = "DOCK_SOUTHSHORE", method = "ship", cost = 488, ride = 260, loadingScreens = 1, oneway = true, requirements = { faction = "Alliance" } }, -- via Menethil, ride 65 + 60 + 135
+    { from = "DOCK_MENETHIL", to = "DOCK_AUBERDINE_MENETHIL", method = "ship", cost = 498, ride = 270, loadingScreens = 1, oneway = true, requirements = { faction = "Alliance" } }, -- via Southshore, ride 135 + 60 + 75
+    { from = "DOCK_SOUTHSHORE", to = "DOCK_MENETHIL", method = "ship", cost = 428, ride = 200, loadingScreens = 2, oneway = true, requirements = { faction = "Alliance" } }, -- via Auberdine, ride 75 + 60 + 65
 
     { from = "DOCK_STEAMWHEEDLE", to = "DOCK_POWDERFUSE", method = "ship", cost = 90, loadingScreens = 1 }, -- new in Forever, both factions; Kalimdor <-> Eastern Kingdoms (Riverglades) so it should have a loading screen (cost still a PLACEHOLDER)
     -- Menethil <-> Theramore shuttle: T = 155, D = 60 -> average 2T + D = 370. Crosses continents (one loading screen).
-    { from = "DOCK_MENETHIL_THERAMORE", to = "DOCK_THERAMORE", method = "ship", cost = 370, loadingScreens = 1, requirements = { faction = "Alliance" } }, -- Classic
-    { from = "DOCK_AUBERDINE_RUTTHERAN", to = "DOCK_RUTTHERAN", method = "ship", cost = 190, loadingScreens = 0, requirements = { faction = "Alliance" } }, -- Classic, Teldrassil ferry; T = 65, D = 60 -> 2T + D = 190, same continent so no loading screen
-    { from = "DOCK_BOOTYBAY", to = "DOCK_RATCHET", method = "ship", cost = 250, loadingScreens = 1 }, -- Classic, both factions, Steamwheedle Cartel; Eastern Kingdoms <-> Kalimdor so it has a loading screen; MEASURED live Ratchet -> Booty Bay: T = 95, D = 60 -> 2T + D = 250 (taken as the same both ways)
+    { from = "DOCK_MENETHIL_THERAMORE", to = "DOCK_THERAMORE", method = "ship", cost = 370, ride = 155, loadingScreens = 1, requirements = { faction = "Alliance" } }, -- Classic
+    { from = "DOCK_AUBERDINE_RUTTHERAN", to = "DOCK_RUTTHERAN", method = "ship", cost = 190, ride = 65, loadingScreens = 0, requirements = { faction = "Alliance" } }, -- Classic, Teldrassil ferry; T = 65, D = 60 -> 2T + D = 190, same continent so no loading screen
+    { from = "DOCK_BOOTYBAY", to = "DOCK_RATCHET", method = "ship", cost = 250, ride = 95, loadingScreens = 1 }, -- Classic, both factions, Steamwheedle Cartel; Eastern Kingdoms <-> Kalimdor so it has a loading screen; MEASURED live Ratchet -> Booty Bay: T = 95, D = 60 -> 2T + D = 250 (taken as the same both ways)
     { from = "DOCK_FEATHERMOON", to = "DOCK_FORGOTTENCOAST", method = "ship", cost = 60, loadingScreens = 0, requirements = { faction = "Alliance" } }, -- Classic ferry to Sardor Isle; same continent, no loading screen (cost still a PLACEHOLDER)
 
     -- Skyborne starting-island ships. Shuttle-boat cost model (T = transit,
@@ -122,9 +125,9 @@ for _, edge in ipairs({
     -- the average is 2T + D. Excludes loading tax.
     -- Horde: T = 140, D = 30 -> best 140, worst 480, average 310.
     -- All dock positions captured live via `/mzdump here`.
-    { from = "DOCK_VALANAAR", to = "DOCK_SKYWATCHER", method = "ship", cost = 310, requirements = { faction = "Horde" } }, -- Zephras Isle <-> Mulgore, new in Forever
+    { from = "DOCK_VALANAAR", to = "DOCK_SKYWATCHER", method = "ship", cost = 310, ride = 140, requirements = { faction = "Horde" } }, -- Zephras Isle <-> Mulgore, new in Forever
     -- Alliance: T = 115, D = 60 -> best 115, worst 465, average 290.
-    { from = "DOCK_ZEPHRAS_ALLIANCE", to = "DOCK_DALARAN", method = "ship", cost = 290, requirements = { faction = "Alliance" } }, -- Zephras Isle <-> Dalaran (Alterac Mountains), new in Forever
+    { from = "DOCK_ZEPHRAS_ALLIANCE", to = "DOCK_DALARAN", method = "ship", cost = 290, ride = 115, requirements = { faction = "Alliance" } }, -- Zephras Isle <-> Dalaran (Alterac Mountains), new in Forever
 
     -- Dalaran <-> Stormwind "Skyborne Portal" (bidirectional, portals at both ends).
     -- Confirmed live: restricted to the Skyborne race, and it does NOT go away
@@ -148,9 +151,9 @@ for _, edge in ipairs({
     -- Zeppelins (Horde only)
     -- Same shuttle model as the ships (average = 2T + D), all three legs measured live (D = 60):
     -- Orgrimmar <-> Undercity T = 120, Undercity <-> Grom'gol T = 90, Grom'gol <-> Orgrimmar T = 95.
-    { from = "ZEPPELIN_ORGRIMMAR_TIRISFAL", to = "ZEPPELIN_TIRISFAL_ORGRIMMAR", method = "zeppelin", cost = 300, requirements = { faction = "Horde" } }, -- MEASURED live Orgrimmar -> Undercity: T = 120, D = 60 -> 2T + D = 300 (taken as the same both ways)
-    { from = "ZEPPELIN_ORGRIMMAR_GROMGOL", to = "ZEPPELIN_GROMGOL_ORGRIMMAR", method = "zeppelin", cost = 250, requirements = { faction = "Horde" } }, -- MEASURED live Grom'gol -> Orgrimmar: T = 95, D = 60 -> 2T + D = 250 (taken as the same both ways; an earlier reading of T = 60 is superseded)
-    { from = "ZEPPELIN_TIRISFAL_GROMGOL", to = "ZEPPELIN_GROMGOL_TIRISFAL", method = "zeppelin", cost = 240, requirements = { faction = "Horde" } }, -- MEASURED live Undercity -> Grom'gol: T = 90, D = 60 -> 2T + D = 240 (taken as the same both ways)
+    { from = "ZEPPELIN_ORGRIMMAR_TIRISFAL", to = "ZEPPELIN_TIRISFAL_ORGRIMMAR", method = "zeppelin", cost = 300, ride = 120, requirements = { faction = "Horde" } }, -- MEASURED live Orgrimmar -> Undercity: T = 120, D = 60 -> 2T + D = 300 (taken as the same both ways)
+    { from = "ZEPPELIN_ORGRIMMAR_GROMGOL", to = "ZEPPELIN_GROMGOL_ORGRIMMAR", method = "zeppelin", cost = 250, ride = 95, requirements = { faction = "Horde" } }, -- MEASURED live Grom'gol -> Orgrimmar: T = 95, D = 60 -> 2T + D = 250 (taken as the same both ways; an earlier reading of T = 60 is superseded)
+    { from = "ZEPPELIN_TIRISFAL_GROMGOL", to = "ZEPPELIN_GROMGOL_TIRISFAL", method = "zeppelin", cost = 240, ride = 90, requirements = { faction = "Horde" } }, -- MEASURED live Undercity -> Grom'gol: T = 90, D = 60 -> 2T + D = 240 (taken as the same both ways)
 
     -- Deeprun Tram (Alliance only), exterior entrance to exterior entrance.
     -- Cost is everything inside the instance (run to platform + wait + ride +

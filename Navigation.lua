@@ -40,8 +40,8 @@ end
 local active       -- the trip: { entry, plan, steps, index, state, finished, model }
 local destinationName   -- (below, with Start) what the navigator's title says
 
--- A flight is timed from take-off to landing, a boat from leaving the dock to arriving (the plan's number
--- also includes waiting for it, so that comparison is only rough). Each measurement, { kind, from, to,
+-- A flight is timed from take-off to landing, a boat from leaving the dock to arriving (compared with its
+-- ride, where the edge has one, not the plan's number, which includes the wait). Each measurement, { kind, from, to,
 -- planned, actual } in seconds, goes to Navigation.onTiming if a tool has set one (MapzerothDataTools
 -- does); nothing is kept or shown here.
 local function report(record)
@@ -143,6 +143,12 @@ function Navigation:Pointer()
     return distance(sample, node), self:Heading(sample, node)
 end
 
+-- Time aboard a boat or zeppelin, from leaving the dock: the edge's `ride` where it has one. The step's own time
+-- is the plan's, which also counts the average wait for it to come in.
+local function rideOf(step)
+    return step.source and step.source.ride or step.seconds
+end
+
 local function radiusOf(step)
     return kindOf(step.method) == "walk" and WALK_RADIUS or ARRIVE_RADIUS
 end
@@ -204,7 +210,7 @@ local function completed(step, sample)
         if (state.underway or farStart) and arrived(step, sample) then
             if state.underway then
                 report({ kind = step.method, from = step.fromID, to = step.nodeID,
-                         planned = step.seconds, actual = sample.now - state.departedAt })
+                         planned = rideOf(step), actual = sample.now - state.departedAt })
             end
             return true
         end
@@ -261,14 +267,15 @@ local function buildModel(sample)
     elseif kind == "transport" then
         if state.underway then
             model.phase = "underway"
+            local ride = rideOf(step)
             local d = distance(sample, node)
             if d and state.routeLength and state.routeLength > 0 then
                 model.progress = clamp(1 - d / state.routeLength, 0, 0.99)
             else
-                model.progress = clamp((sample.now - state.departedAt) / step.seconds, 0, 0.99)
+                model.progress = clamp((sample.now - state.departedAt) / ride, 0, 0.99)
             end
-            model.overrun = (sample.now - state.departedAt) > step.seconds
-            left = step.seconds * (1 - model.progress)
+            model.overrun = (sample.now - state.departedAt) > ride
+            left = ride * (1 - model.progress)
         else
             model.phase = "waiting"
             model.progress = 0
