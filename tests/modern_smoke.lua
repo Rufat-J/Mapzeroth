@@ -899,3 +899,6 @@ do
         check(linked(pair[1], pair[2]) and linked(pair[2], pair[1]), "through the cave both ways: " .. pair[1])
     end
 end
+
+-- Modern characters are mostly well travelled: flight points not yet seen at a flight master count as found.
+check(addon.Options:Get("assumeFlightsFound") == true, "on Modern, unseen flight points are assumed found by default")

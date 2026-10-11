@@ -22,7 +22,8 @@ local addonName, addon = ...
 -- That strictness needed a flight master visit per continent before any flight counted, and the client has
 -- no other answer (the world map's C_TaxiMap.GetTaxiNodesForMap returns every point with no state; probed
 -- 2026-09-23). So routing asks ctx.flightUsable (PlayerAbilities.lua): nil (unknown) counts as found while
--- the assumeFlightsFound setting is on (the default), and only a point a window reported not found (false)
+-- the assumeFlightsFound setting is on (the default on Modern; off on Forever, where characters start fresh),
+-- and only a point a window reported not found (false)
 -- is never flown to. A route that leans on an unknown point says so (Journey plan.assumed).
 
 local FlightKnowledge = {}

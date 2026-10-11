@@ -17,7 +17,9 @@ local definitions = {
     theme = { default = "moderndark" },
     showRouteOnMap = { default = true, boolean = true },                  -- the route drawn on the world map
     showRouteOnMinimap = { default = true, boolean = true },              -- and on the minimap, while following a trip
-    assumeFlightsFound = { default = true, boolean = true },              -- a flight point Mapzeroth hasn't seen a flight master's window about counts as found (FlightKnowledge.lua)
+    -- A flight point Mapzeroth hasn't seen a flight master's window about counts as found (FlightKnowledge.lua). Off on
+    -- Forever, where nearly everyone starts a fresh character and has found nothing yet.
+    assumeFlightsFound = { default = addon.RULESET ~= "forever", boolean = true },
     docked = { default = true, boolean = true },                          -- the panel: docked beside the map, or free-floating (UI/Panel.lua)
     hideSllcmHint = { default = false, boolean = true },                  -- the picker's pointer to Skyborne Ley Line & Convergence Marker, dismissed (UI/Panel.lua)
     hideMinimapButton = { default = false, boolean = true },              -- the button on the minimap rim (UI/MinimapButton.lua)

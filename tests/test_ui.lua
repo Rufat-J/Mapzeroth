@@ -844,10 +844,10 @@ addon.OptionsPanel:Sync()
 check(pw.tax.slider._value == 10 and pw.tax.value._text == "10 s", "it shows the loading screen time: " .. tostring(pw.tax.value._text))
 check(pw.scale.slider._value == 1 and pw.scale.value._text == "100%", "and the scale: " .. tostring(pw.scale.value._text))
 check(pw.theme.button.label._text:find("Modern Dark", 1, true), "and the theme: " .. tostring(pw.theme.button.label._text))
-check(pw.assumeFlights.button.label._text:find("On", 1, true), "flight points are assumed found by default: " .. tostring(pw.assumeFlights.button.label._text))
-pw.assumeFlights:Select(false)
-check(Options:Get("assumeFlightsFound") == false and pw.assumeFlights.button.label._text:find("Off", 1, true), "and the dropdown turns it off")
+check(pw.assumeFlights.button.label._text:find("Off", 1, true), "on Forever, flight points aren't assumed found by default: " .. tostring(pw.assumeFlights.button.label._text))
 pw.assumeFlights:Select(true)
+check(Options:Get("assumeFlightsFound") == true and pw.assumeFlights.button.label._text:find("On", 1, true), "and the dropdown turns it on")
+pw.assumeFlights:Select(false)
 
 -- The page scrolls when the Settings window is shorter than the settings, and doesn't when they fit.
 do
