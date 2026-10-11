@@ -42,8 +42,18 @@ function Journey:Build(ctx, start, extras)
     return { ctx = ctx, start = start, graph = graph, extras = extras }
 end
 
--- The places that aren't nodes of ours a destination entry needs in the graph: a waypoint, or a tour's stops.
+-- A "nearest ley line / convergence" pick.
+local function leyPick(entry)
+    return entry.pick and entry.nodeIDs and (entry.group == "leyline" or entry.group == "convergence") and addon.LeyShare
+end
+
+-- The places that aren't nodes of ours a destination entry needs in the graph: a waypoint, a tour's stops, or for a
+-- ley line or convergence pick, the ones other players' sightings found that our data doesn't have (LeyShare.lua).
 function Journey:ExtrasOf(entry)
+    if leyPick(entry) then
+        local places = addon.LeyShare:SharedPlaces()
+        return #places > 0 and places or nil
+    end
     if entry.stops then
         local places = {}
         for _, stop in ipairs(entry.stops) do
@@ -102,7 +112,9 @@ function Journey:Cost(session, nodeID)
     return costs(session)[nodeID]
 end
 
+-- A ley line or convergence pick can go to the shared nodes too, until a round trip has chosen one place (`placeChosen`).
 local function goalsOf(entry)
+    if leyPick(entry) and not entry.placeChosen then return addon.LeyShare:WithShared(entry.nodeIDs) end
     return entry.nodeIDs or { entry.nodeID }
 end
 
@@ -458,10 +470,33 @@ function Journey:Plan(session, goalID, banned, backBanned)
     return plan
 end
 
+-- A "nearest ley line / convergence" pick's nodes that were seen up in the player's phase in the last hour (other
+-- players' sightings and their own, LeyShare.lua): { nodeIDs, ages by node id }, or nil when none were.
+local function sighted(entry)
+    if not leyPick(entry) then return nil end
+    local goals = goalsOf(entry)
+    local ages = addon.LeyShare:SeenAmong(goals)
+    if not ages then return nil end
+    local ids = {}
+    for _, id in ipairs(goals) do
+        if ages[id] then ids[#ids + 1] = id end
+    end
+    return ids, ages
+end
+
 -- `yield` (optional): called between searches, so a long plan (a tour, MultiRoute.lua) can be spread over several
--- frames (MultiRoute:Run); a plan to one place ignores it.
+-- frames (MultiRoute:Run); a plan to one place ignores it. A ley line or convergence pick goes to the nearest one seen
+-- up in the player's phase when it can be reached (plan.seenAge: seconds since), else the nearest of them all.
 function Journey:PlanEntry(session, entry, yield)
     if entry.stops then return addon.MultiRoute:Plan(session, entry, yield) end
+    local seen, ages = sighted(entry)
+    if seen then
+        local plan = self:Plan(session, seen, entry.banned, entry.backBanned)
+        if plan then
+            plan.seenAge = ages[plan.goal]
+            return plan
+        end
+    end
     return self:Plan(session, goalsOf(entry), entry.banned, entry.backBanned)       -- the plan, or nil and a hint about a missing flight
 end
 
@@ -470,12 +505,15 @@ end
 -- planned for: that one place and the abilities each way leaves alone, so the trip can be planned again part way
 -- (Navigation). Nil when no place can be reached and left again.
 function Journey:PlanRoundTrip(session, entry)
-    local best = self:RoundTrip(session, goalsOf(entry))
+    local seen, ages = sighted(entry)
+    local best = seen and self:RoundTrip(session, seen) or self:RoundTrip(session, goalsOf(entry))
     if not best then return nil end
     local trip = {}
     for k, v in pairs(entry) do trip[k] = v end
     trip.nodeID, trip.nodeIDs, trip.banned, trip.backBanned = best.nodeID, { best.nodeID }, best.banned, best.backBanned
+    trip.placeChosen = true
     local plan = self:Plan(session, trip.nodeIDs, trip.banned, trip.backBanned)
+    if plan and ages then plan.seenAge = ages[best.nodeID] end
     return plan, plan and trip or nil
 end
 

@@ -869,6 +869,27 @@ pw.assumeFlights:Select(true)
 check(Options:Get("assumeFlightsFound") == true and pw.assumeFlights.button.label._text:find("On", 1, true), "and the dropdown turns it on")
 pw.assumeFlights:Select(false)
 
+-- Sharing ley line sightings (Forever): a normal row without SLLCM; greyed out with the reason in its title with it.
+check(pw.share and pw.share.title:GetText() == "Share ley line sightings" and not pw.share.disabled, "the sharing row is there")
+check(pw.share.button.label._text == "Off  v", "off until asked: " .. tostring(pw.share.button.label._text))
+pw.share:SetEnabled(false)
+check(pw.share.disabled and pw.share.button.label._text == "Off" and not pw.share.menu._shown, "a disabled dropdown loses its arrow and stays shut")
+pw.share:SetEnabled(true)
+check(pw.share.button.label._text == "Off  v", "and gets it back")
+local realLoaded = C_AddOns
+C_AddOns = { IsAddOnLoaded = function(name) return name == "SkyborneLeyLineConvergenceMarker" end }
+local savedShare = pw.share
+addon.OptionsPanel:Build()
+local sw = addon.OptionsPanel.widgets.share
+check(sw.title:GetText() == "Share ley line sightings (Disabled, SLLCM installed)" and sw.disabled, "with SLLCM loaded the row says why and is greyed out")
+check(sw.hint:GetText() == addon.L["OPT_SHARE_DESC"], "and still describes the setting")
+Options:Set("shareSightings", true)
+addon.OptionsPanel:Sync()
+check(sw.button.label._text == "Off", "and shows Off, whatever is saved: " .. tostring(sw.button.label._text))
+Options:Set("shareSightings", false)
+C_AddOns = realLoaded
+addon.OptionsPanel.widgets.share = savedShare
+
 -- The page scrolls when the Settings window is shorter than the settings, and doesn't when they fit.
 do
     local sc = pw.scroll

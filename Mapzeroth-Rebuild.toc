@@ -94,6 +94,7 @@ Journey.lua
 MultiRoute.lua
 Navigation.lua
 MapRoute.lua
+LeyShare.lua
 
 # UI
 UI\Theme.lua
@@ -106,6 +107,7 @@ UI\LinkPopup.lua
 UI\Panel.lua
 UI\MinimapButton.lua
 UI\Navigator.lua
+UI\SharePrompt.lua
 UI\OptionsPanel.lua
 
 Core.lua

@@ -593,8 +593,13 @@ function Panel.TooltipLines(entry, ctx)
     if entry.action == "tomtom" or entry.action == "paste" then
         return { { entry.name, "title" }, { L[entry.action == "tomtom" and "TIP_TOUR_TOMTOM" or "TIP_TOUR_PASTE"], "body" } }
     elseif entry.group == "leyline" or entry.group == "convergence" then
-        return { { entry.pick and entry.where or entry.name, "title" },
-                 { L[entry.group == "leyline" and "TIP_LEYLINE" or "TIP_CONVERGENCE"], "body" } }
+        local lines = { { entry.pick and entry.where or entry.name, "title" },
+                        { L[entry.group == "leyline" and "TIP_LEYLINE" or "TIP_CONVERGENCE"], "body" } }
+        -- Seen up in the player's phase lately (LeyShare.lua): the pick goes to the nearest of those.
+        local seen, count
+        if entry.pick and entry.nodeIDs and addon.LeyShare then seen, count = addon.LeyShare:SeenAmong(addon.LeyShare:WithShared(entry.nodeIDs)) end
+        if count then lines[#lines + 1] = { L["TIP_SEEN"]:format(count), "good" } end
+        return lines
     elseif entry.group == "trainer" then
         return trainerLines(entry, ctx)
     end
@@ -883,6 +888,7 @@ function Panel:DisplayPlan(entry, plan)
     add(Journey:FareText(plan))
     add(Journey:HintText(plan.hint))
     add(Journey:AssumedText(plan))
+    if plan.seenAge then add(L["ROUTE_SEEN"]:format(math.max(1, math.floor(plan.seenAge / 60 + 0.5)))) end
     ui.routeHint:SetText(table.concat(hints, "\n"))
     layoutSteps()
     ui.start:SetShown(#plan.steps > 0 and not state.pinned and not plan.unaffordable)

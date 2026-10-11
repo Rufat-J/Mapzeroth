@@ -2,7 +2,7 @@ local addonName, addon = ...
 
 -- The settings page, in the game's own Settings window (Game Menu > Options > AddOns >
 -- Mapzeroth, or /mapzeroth settings): how long a loading screen counts for in a route, the size of
--- our windows, the theme, whether the route is drawn on the map and on the minimap, and icons or colour bars beside route steps. The page is built from our own themed widgets and handed to the
+-- our windows, the theme, whether the route is drawn on the map and on the minimap, icons or colour bars beside route steps, and (Forever) sharing ley line sightings. The page is built from our own themed widgets and handed to the
 -- game as a canvas, so it follows the theme like everything else. What the settings mean and
 -- how they are kept is Options.lua's; this file only draws them.
 --
@@ -18,6 +18,7 @@ local Options = addon.Options
 
 local PAD = 20
 local CONTENT_HEIGHT = 864      -- how tall the settings are laid out; the page scrolls when the window is shorter
+local SHARE_ROW = 80            -- and the extra row for sharing ley line sightings, on a dataset with ley lines (Forever)
 local widgets = {}
 local menuHost                  -- where the dropdowns' lists go: outside the scrolled part, so they aren't clipped
 
@@ -52,11 +53,11 @@ end
 
 -- An on/off setting.
 local function toggleRow(parent, top, key, label, description)
-    local _, hint = optionRow(parent, top, label, description)
+    local title, hint = optionRow(parent, top, label, description)
     local choices = { { id = true, label = L["OPT_ON"] }, { id = false, label = L["OPT_OFF"] } }
     local dropdown = Theme:Dropdown(parent, CONTROL_WIDTH, choices, function(id) Options:Set(key, id) end, menuHost)
     dropdown.button:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -PAD, -(top + 2))
-    dropdown.hint = hint
+    dropdown.title, dropdown.hint = title, hint
     dropdown.key = key
     return dropdown
 end
@@ -188,7 +189,7 @@ function OptionsPanel:Build()
     frame.name = L["OPT_TITLE"]
     self.frame = frame
 
-    local panel, box, fit, scroll = scrolledPage(frame, CONTENT_HEIGHT)
+    local panel, box, fit, scroll = scrolledPage(frame, CONTENT_HEIGHT + (addon.LeyLineSpell and SHARE_ROW or 0))
     menuHost = panel
     widgets.scroll = scroll
 
@@ -228,6 +229,16 @@ function OptionsPanel:Build()
 
     widgets.hideMinimap = toggleRow(box, 776, "hideMinimapButton", L["OPT_HIDE_MINIMAP"], L["OPT_HIDE_MINIMAP_DESC"])
 
+    if addon.LeyLineSpell then
+        widgets.share = toggleRow(box, 856, "shareSightings", L["OPT_SHARE"], L["OPT_SHARE_DESC"])
+        if addon.LeyShare:SllcmLoaded() then
+            -- That addon shares instead (and has its own setting): say so in the title, grey the row out.
+            widgets.share.title:SetText(L["OPT_SHARE_SLLCM_TITLE"])
+            Theme:SetTextStyle(widgets.share.title, "dim")
+            widgets.share:SetEnabled(false)
+        end
+    end
+
     settingsHooks(frame, fit)
 
     self.widgets = widgets
@@ -249,6 +260,8 @@ function OptionsPanel:Sync()
     widgets.assumeFlights:SetValue(Options:Get("assumeFlightsFound"))
     widgets.stepMarkers:SetValue(Options:Get("stepMarkers"))
     widgets.hideMinimap:SetValue(Options:Get("hideMinimapButton"))
+    -- Off while SLLCM is loaded, whatever is saved: Mapzeroth isn't sharing then.
+    if widgets.share then widgets.share:SetValue(not widgets.share.disabled and Options:Get("shareSightings")) end
     for _, check in ipairs(widgets.picks or {}) do check:SetChecked(Options:ShowsPick(check.key)) end
 end
 

@@ -529,6 +529,8 @@ end
 -- table with :SetValue(id) (shows an option without calling onSelect) and :Select(id) (as if
 -- the player clicked it). The list is a child of the button, so it hides with it, unless `menuParent` is given:
 -- a button inside a scroll frame needs its list outside it, or the list is clipped to the scrolled view.
+local DISABLED_ALPHA = 0.4     -- how far a disabled control fades
+
 function Theme:Dropdown(parent, width, options, onSelect, menuParent)
     local dropdown = { options = options, rows = {} }
     dropdown.button = Theme:Button(parent, "", width, 24)
@@ -543,8 +545,17 @@ function Theme:Dropdown(parent, width, options, onSelect, menuParent)
         self.value = id
         for i, option in ipairs(self.options) do
             self.rows[i]:SetSelected(option.id == id)
-            if option.id == id then self.button.label:SetText(option.label .. "  v") end
+            -- The arrow says it opens: a disabled one doesn't.
+            if option.id == id then self.button.label:SetText(option.label .. (self.disabled and "" or "  v")) end
         end
+    end
+    -- Greyed out and unclickable (any theme: the whole button fades), or back to normal.
+    function dropdown:SetEnabled(on)
+        self.disabled = not on
+        self.button:SetEnabled(on)
+        self.button:SetAlpha(on and 1 or DISABLED_ALPHA)
+        self.menu:Hide()
+        if self.value ~= nil then self:SetValue(self.value) end
     end
     function dropdown:Select(id)
         self:SetValue(id)
@@ -780,6 +791,15 @@ end
 
 function Theme:HideTooltip(owner)
     if GameTooltip and GameTooltip:IsOwned(owner) then GameTooltip:Hide() end
+end
+
+-- Change a Theme:Text's style ("dim" to grey out a label, say).
+function Theme:SetTextStyle(fs, style)
+    local info = widgets[fs]
+    if info then
+        info.opts.style = style
+        self:Restyle(fs)
+    end
 end
 
 -- Re-skin one widget (after changing what it shows, such as a row's marker).

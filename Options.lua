@@ -25,6 +25,10 @@ local definitions = {
     hideMinimapButton = { default = false, boolean = true },              -- the button on the minimap rim (UI/MinimapButton.lua)
     roundTrip = { default = false, boolean = true },                      -- routes are there and back to here (UI/Panel.lua's choice on a route)
     stepMarkers = { default = "icon" },                                   -- a route step shows how it travels: "icon" (a picture) or "chip" (a coloured bar)
+    -- Ley line and convergence sightings shared with Skyborne Ley Line & Convergence Marker's users (LeyShare.lua):
+    -- off until the player says yes to the question (UI/SharePrompt.lua), asked once per account.
+    shareSightings = { default = false, boolean = true },
+    shareAsked = { default = false, boolean = true },
 }
 
 -- "showPick_<key>": whether the picker offers that pick (a top pick or one of the trainers) (Sections.lua names the
