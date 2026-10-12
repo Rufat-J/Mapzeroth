@@ -703,6 +703,46 @@ addon.Panel:OnWaypointChanged()
 check(not pickNamed("Your Waypoint"), "clearing it removes the pick")
 C_Map.HasUserWaypoint, C_Map.GetUserWaypoint = nil, nil
 
+-- Set while a route is showing (or a search typed), the waypoint is on the list when it is gone back to; sections that
+-- were open stay open.
+do
+    addon.Panel:Query("")
+    addon.Panel:Choose(headerIndex("trainers"))
+    check(state.open.trainers, "a section is open")
+    addon.Panel:ShowRoute({ name = "Booty Bay", nodeID = "TOWN_BOOTY_BAY" })
+    C_Map.HasUserWaypoint = function() return true end
+    C_Map.GetUserWaypoint = function() return { uiMapID = 1453, position = { GetXY = function() return 0.4, 0.3 end } } end
+    addon.Panel:OnWaypointChanged()
+    check(state.view == "route", "the route stays up")
+    addon.Panel:Query("")
+    check(pickNamed("Your Waypoint") and state.open.trainers, "back on the list: the waypoint is there, and the section still open")
+
+    -- TomTom gives no event: the window looks once a second (RefreshTop), and the pick appears.
+    TomTom = { waypoints = { [1453] = { a = { 1453, 0.5, 0.5, title = "A" }, b = { 1453, 0.6, 0.6, title = "B" } } } }
+    addon.Panel:RefreshTop()
+    check(pickNamed("Your TomTom Waypoints (2)"), "TomTom's waypoints show without reopening the map")
+    TomTom.waypoints[1453].c = { 1453, 0.7, 0.7, title = "C" }
+    addon.Panel:RefreshTop()
+    check(pickNamed("Your TomTom Waypoints (3)"), "and the count follows them")
+    TomTom = nil
+
+    -- A waypoint set with the continent map showing is placed on the zone under it.
+    local realMapInfo, realWorld, realMapPos, realAt = C_Map.GetMapInfo, C_Map.GetWorldPosFromMapPos, C_Map.GetMapPosFromWorldPos, C_Map.GetMapInfoAtPosition
+    C_Map.GetWorldPosFromMapPos = function(id, v) return 0, CreateVector2D(v.x, v.y) end
+    C_Map.GetMapPosFromWorldPos = function(_, w, id) return nil, CreateVector2D(w.x, w.y) end
+    C_Map.GetMapInfoAtPosition = function(id) if id == 1415 then return { mapID = 1453 } end end
+    C_Map.GetUserWaypoint = function() return { uiMapID = 1415, position = { GetXY = function() return 0.41, 0.31 end } } end
+    addon.Panel:OnWaypointChanged()
+    local placed = pickNamed("Your Waypoint")
+    check(placed and placed.dest.mapID == 1453, "a continent-map waypoint lands on the zone under it: " .. tostring(placed and placed.dest.mapID))
+    C_Map.GetWorldPosFromMapPos, C_Map.GetMapPosFromWorldPos, C_Map.GetMapInfoAtPosition = realWorld, realMapPos, realAt
+    C_Map.HasUserWaypoint, C_Map.GetUserWaypoint = function() return false end, nil
+    addon.Panel:OnWaypointChanged()
+    C_Map.HasUserWaypoint = nil
+    addon.Panel:Query("")
+    addon.Panel:Choose(headerIndex("trainers"))          -- closed again, as the tests below expect
+end
+
 -- Picks are one line with no time; chosen, the route is one way or a round trip, as picked on the route itself.
 do
     addon.Panel:Query("")

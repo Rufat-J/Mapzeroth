@@ -30,6 +30,7 @@
 
 ### Fixed
 - An error in combat when a route used a teleport (the game hides cooldowns from addons in combat).
+- "Your Waypoint" sometimes didn't appear: a waypoint set with a continent map showing, or set while a route or a search was on screen, now shows in the picker.
 - Flight steps show the flight master's boot icon; it was blank.
 - The route on the minimap follows square minimaps.
 - Navigator: a boat or zeppelin you're already on counts down the ride, not the average wait plus ride.

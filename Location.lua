@@ -23,6 +23,15 @@ local function knownMap(mapID, x, y)
         local up = C_Map.GetMapInfo(parent)
         parent = up and up.parentMapID
     end
+    -- A broader map than ours (a waypoint set with the continent map showing): down to the zone under the spot.
+    local child = C_Map.GetMapInfoAtPosition and C_Map.GetMapInfoAtPosition(mapID, x, y)
+    if child and child.mapID and child.mapID ~= mapID and continent then
+        local _, pos = C_Map.GetMapPosFromWorldPos(continent, world, child.mapID)
+        if pos then
+            local cx, cy = pos:GetXY()
+            return knownMap(child.mapID, cx, cy)
+        end
+    end
 end
 
 -- The player as a start node { id, mapID, x, y }, or nil and a reason ("no map",

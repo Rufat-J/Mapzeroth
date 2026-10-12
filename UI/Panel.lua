@@ -21,6 +21,7 @@ local INNER = WIDTH - 2 * PAD
 local LIST_TOP = 86
 local ROW_H = 38
 local ROWS = math.floor((HEIGHT - PAD - LIST_TOP) / ROW_H)   -- as many result rows as the panel has room for
+local TOP_CHECK_SECONDS = 1     -- how often the open window looks for changed waypoints (TomTom has no event for it)
 local INDENT = 14                         -- how far an item of an accordion section sits in from its heading
 local STEP_H, STEPS = 30, 9               -- STEPS rows at most; fewer show when the route's notes take room (layoutSteps)
 local SPLIT_TOP = LIST_TOP + 72           -- the bar of how the time splits by way of travel, under the total
@@ -1311,23 +1312,48 @@ function Panel:SetDocked(docked, initial)
     end
 end
 
+-- What the top picks depend on: the map waypoint and how many TomTom waypoints there are, as a string that changes
+-- when either does, and the two themselves.
+local function topKey()
+    local waypoint, tomtom = addon:GetWaypoint(), addon:GetTomTomPoints()
+    return (waypoint and waypoint.id or "-") .. "|" .. (tomtom and #tomtom or "-"), waypoint, tomtom
+end
+
 -- Re-read the player and the world when the map opens: who they are, and the places to offer.
 function Panel:Refresh()
     state.ctx = addon:GetPlayerContext()
     state.entries = addon.Destinations:Build(state.ctx)
     -- A new window: the sections start closed, and are priced from where the player is when one of places is opened.
-    state.waypoint = addon:GetWaypoint()
-    local tomtom = addon:GetTomTomPoints()
+    local waypoint, tomtom
+    state.topKey, waypoint, tomtom = topKey()
+    state.waypoint = waypoint
     state.sections = addon.Sections:Build(state.entries, state.ctx, state.waypoint, tomtom and #tomtom)
     state.open, state.priced, state.session = {}, false, nil
     state.pasteOpen = nil
 end
 
--- The player set or cleared their map waypoint: the first top pick changes with it.
+-- The map waypoint or TomTom's waypoints changed: the picks at the top change with them. The sections are built again
+-- and the open ones stay open (priced again if they show times, since the waypoint is part of that search). On the list,
+-- it shows at once; on a route or a search, the list is up to date when it is gone back to.
+function Panel:RefreshTop()
+    if not state.entries then return end
+    local key, waypoint, tomtom = topKey()
+    if key == state.topKey then return end
+    state.topKey, state.waypoint = key, waypoint
+    state.sections = addon.Sections:Build(state.entries, state.ctx, waypoint, tomtom and #tomtom)
+    state.priced, state.session = false, nil
+    for id, open in pairs(state.open) do
+        if open and addon.Sections:NeedsPricing(state.sections, id) then
+            self:PriceSections()
+            break
+        end
+    end
+    if ui and ui.frame:IsShown() and state.view == "list" and ui.search:GetText() == "" then self:ShowMenu() end
+end
+
+-- The player set or cleared their map waypoint.
 function Panel:OnWaypointChanged()
-    if not (ui and ui.frame:IsShown()) or state.view ~= "list" or ui.search:GetText() ~= "" then return end
-    self:Refresh()
-    self:Query("")
+    self:RefreshTop()
 end
 
 -- What the window shows when it opens: fresh places, and the trip in progress if there is one, else the search page.
@@ -1409,6 +1435,12 @@ function Panel:Init()
         end
     end)
     WorldMapFrame:HookScript("OnShow", function() Panel:OnMapShown() end)
+    -- TomTom says nothing when its waypoints change: look once a second while the window is up.
+    if C_Timer and C_Timer.NewTicker then
+        C_Timer.NewTicker(TOP_CHECK_SECONDS, function()
+            if ui and ui.frame:IsShown() then Panel:RefreshTop() end
+        end)
+    end
     addon.RouteLines:Init()
     WorldMapFrame:HookScript("OnSizeChanged", function()
         if ui and ui.frame:IsShown() then Panel:Reanchor() end
