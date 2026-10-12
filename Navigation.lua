@@ -21,7 +21,9 @@ local addonName, addon = ...
 -- A step is done when the player is within a small radius of its destination (a landing or a
 -- ship's arrival counts too; a teleport or portal also counts the moment the player is suddenly
 -- somewhere else, since a bind point can be well away from the inn node we have for it). If they get to a later step's destination, the steps between are
--- skipped, and finishing the last step ends the trip.
+-- skipped, and finishing the last step ends the trip. A walk, or a ship once it has left, also counts as done when
+-- the player is already nearer the next walk's destination than its own destination is: they cut across a field
+-- past a checkpoint, or jumped off a boat short of the dock (see `passed`).
 
 local Navigation = {}
 addon.Navigation = Navigation
@@ -32,6 +34,7 @@ local DEPART_RADIUS = 40     -- yards moved from the boarding point before a shi
 local JUMP = 300             -- yards between two updates that can only be a teleport or a portal
 local TICKET_WAIT = 15       -- seconds a chosen flight has to start before we forget it was chosen
 local NOTICE_TIME = 8        -- seconds a note ("Route updated") stays up
+local PASS_MARGIN = 20       -- yards nearer the next destination than a step's own end must be before it counts as passed
 
 local function kindOf(method)
     return addon:Method(method).kind
@@ -153,21 +156,55 @@ local function radiusOf(step)
     return kindOf(step.method) == "walk" and WALK_RADIUS or ARRIVE_RADIUS
 end
 
+-- True when the player is at the step's destination; also the yards to it, when they were measured.
 local function arrived(step, sample)
     if step.method == "equip" then return false end       -- putting something on isn't going anywhere
     local d = distance(sample, nodeOf(step.nodeID))
-    return d ~= nil and d <= radiusOf(step)
+    return d ~= nil and d <= radiusOf(step), d
+end
+
+-- The last step that can be looked ahead to from the current one: the end of the leg it is on, else the route's end.
+local function lookAheadEnd()
+    if active.legOf and active.legOf[active.index] then return active.legEnds[active.legOf[active.index]] end
+    return #active.steps
 end
 
 local function beginStep(sample)
     local step = active.steps[active.index]
     local node = nodeOf(step.nodeID)
     local state = { startedAt = sample.now, startDistance = distance(sample, node) }
-    if kindOf(step.method) == "transport" then
+    local kind = kindOf(step.method)
+    if kind == "transport" then
         state.origin = nodeOf(step.fromID)
         state.routeLength = state.origin and node and addon.TravelGraph.DistanceProvider(state.origin, node)
     end
+    -- A walk or a ship followed by a walk (in the same leg: a tour's stop is never passed) can be passed: `gap` is how
+    -- far its end is from the next one's. Not when the player already starts nearer than that, though: the step
+    -- may be the way round something (a pass over a ridge), and the next place only looks near in a straight line.
+    local nextStep = active.index < lookAheadEnd() and active.steps[active.index + 1]
+    if nextStep and kindOf(nextStep.method) == "walk" and (kind == "walk" or kind == "transport") then
+        local nextNode = nodeOf(nextStep.nodeID)
+        local gap = node and nextNode and addon.TravelGraph.DistanceProvider(node, nextNode)
+        local fromStart = gap and distance(sample, nextNode)
+        if gap and not (fromStart and fromStart < gap - PASS_MARGIN) then state.gap = gap end
+    end
+    -- A walk to a zone border (BORDER_<A>_TO_<B>, on A's map; its pair BORDER_<B>_TO_<A> is on B's) is passed once the
+    -- player is on B's map, however they crossed: over a river or down a slope instead of by the road.
+    local a, b
+    if type(step.nodeID) == "string" then a, b = step.nodeID:match("^BORDER_(.+)_TO_(.+)$") end
+    local pair = a and addon.World:GetNode("BORDER_" .. b .. "_TO_" .. a)
+    if kind == "walk" and pair and node and pair.mapID ~= node.mapID then state.farSide = pair.mapID end
     active.state = state
+end
+
+-- True when the current step has been passed without reaching its end (see beginStep): `toNext` is the yards from the
+-- player to the next step's destination. A ship has to have been seen leaving first.
+local function passed(step, toNext, sample)
+    local state = active.state
+    if state.farSide and sample.mapID == state.farSide then return true end
+    if not (state.gap and toNext) then return false end
+    if kindOf(step.method) == "transport" and not state.underway then return false end
+    return toNext < state.gap - PASS_MARGIN
 end
 
 local function advance(sample)
@@ -330,12 +367,6 @@ function Navigation:Start(entry, plan, notice)
                index = 1, finished = false, jumped = false, notice = notice, extra = extra }
 end
 
--- The last step that can be looked ahead to from the current one: the end of the leg it is on, else the route's end.
-local function lookAheadEnd()
-    if active.legOf and active.legOf[active.index] then return active.legEnds[active.legOf[active.index]] end
-    return #active.steps
-end
-
 -- What the navigator's title says: where the trip goes, or for a tour the stop this leg goes to (the step count beside
 -- it already says how far along the trip is).
 destinationName = function()
@@ -359,6 +390,15 @@ local function restOfTour()
         if i > k then rest.keep[#rest.keep + 1] = leg end
     end
     return rest
+end
+
+-- What to plan again from where the player is now, to carry on the trip: the destination entry (for a tour, the stops
+-- still to come) and where a round trip goes back to. Nil when no trip is being followed. Leaves the trip as it is.
+function Navigation:ReplanTarget()
+    if not active or active.finished then return nil end
+    local entry = active.entry
+    if entry and entry.stops and active.legs then entry = restOfTour() end
+    return entry, active.returnTo
 end
 
 -- A flight was chosen at a flight master: stops = the node ids the ticket lands at, the last being where
@@ -458,8 +498,7 @@ update = function(sample)
 
         if active.offRoute then
             if not sample.onTaxi then            -- landed somewhere the route didn't go: plan again from here
-                local entry, returnTo = active.entry, active.returnTo
-                if entry and entry.stops and active.legs then entry = restOfTour() end      -- a tour: the stops still to come
+                local entry, returnTo = Navigation:ReplanTarget()
                 active = nil
                 return { replan = true, entry = entry, returnTo = returnTo }
             end
@@ -470,15 +509,18 @@ update = function(sample)
         end
 
         -- Already at a later step's destination: skip everything before it. (Not in the air: a flight
-        -- passing over a later stop hasn't got there.)
+        -- passing over a later stop hasn't got there.) On the way, the yards to the next step's end, for `passed`.
+        local was, toNext = active.index, nil
         if not sample.onTaxi then
             for j = lookAheadEnd(), active.index + 1, -1 do
-                if arrived(active.steps[j], sample) then
+                local there, d = arrived(active.steps[j], sample)
+                if there then
                     active.index = j
                     beginStep(sample)
                     advance(sample)
                     break
                 end
+                if j == was + 1 then toNext = d end
             end
         end
         -- Did the player just appear somewhere far from where they were a moment ago?
@@ -492,6 +534,10 @@ update = function(sample)
         while not active.finished and completed(active.steps[active.index], sample) do
             advance(sample)
             active.jumped = false           -- one jump ends one step
+        end
+        -- Not there, but past it: the next step is the one to follow now. (Only for the step the distance was read for.)
+        if not active.finished and active.index == was and passed(active.steps[was], toNext, sample) then
+            advance(sample)
         end
     end
     remember(sample)

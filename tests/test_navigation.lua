@@ -302,3 +302,74 @@ N:OnTakeTaxi({ "TAXI_8" }, 5)
 N:Update(flying("TAXI_2", 10))
 m = N:Update(at("TAXI_8", 0.002, 0, { now = 200 }))
 check(m.replan and m.returnTo and m.returnTo.id == "YOU_home", "a new route is asked for with the original return point")
+
+-- Passing a step without reaching its end. Places of our own on one map (a tour's stops are the trip's extra places):
+-- S, then A 250 yards east of it, then B 170 yards north of A. The route goes S > A > B, an L.
+do
+    local mapID = addon.World:GetNode("TAXI_2").mapID
+    local function place(id, x, y) return { id = id, mapID = mapID, x = x, y = y } end
+    local S, A, B, O = place("P_S", 0.30, 0.50), place("P_A", 0.40, 0.50), place("P_B", 0.40, 0.40), place("P_O", 0.10, 0.50)
+    local places = { name = "Passing", stops = { { place = S }, { place = A }, { place = B }, { place = O } } }
+    local function spot(x, y, now) return { mapID = mapID, x = x, y = y, now = now or 0, onTaxi = false } end
+
+    local corner = { steps = { step("walk", "P_S", "P_A", 60), step("walk", "P_A", "P_B", 40) } }
+    N:Start(places, corner)
+    m = N:Update(spot(0.30, 0.50))
+    check(m.index == 1, "starts on the walk to the corner")
+    m = N:Update(spot(0.33, 0.49, 1))           -- 232 yards from B, B is 170 from the corner
+    check(m.index == 1, "not past the corner yet: still the walk to it")
+    m = N:Update(spot(0.36, 0.46, 2))           -- across the field: 121 yards from the corner, 143 from B
+    check(m.index == 2 and m.step.nodeID == "P_B", "cutting across, nearer B than the corner is: on to B: " .. tostring(m.index))
+
+    -- Starting already nearer B than the corner is (B just over a ridge): the corner is the way round, so it isn't
+    -- passed, only reached.
+    N:Start(places, corner)
+    m = N:Update(spot(0.45, 0.42))              -- 129 yards from B
+    m = N:Update(spot(0.43, 0.43, 1))
+    check(m.index == 1, "starting near B in a straight line doesn't skip the corner")
+    m = N:Update(spot(0.405, 0.50, 2))
+    check(m.index == 2, "reaching the corner still moves on")
+
+    -- The next step not a walk (the corner is a flight master): never passed, the flight needs the corner.
+    N:Start(places, { steps = { step("walk", "P_S", "P_A", 60), step("taxi", "P_A", "P_B", 40) } })
+    N:Update(spot(0.30, 0.50))
+    m = N:Update(spot(0.36, 0.46, 1))
+    check(m.index == 1, "a walk to a flight master is not passed")
+
+    -- A boat from O to the dock at A, then a walk to the flight master at B. Jumping off and swimming ashore short of
+    -- the dock passes the boat; it isn't timed, as it never reached the dock.
+    local boat = { steps = { step("ship", "P_O", "P_A", 100), step("walk", "P_A", "P_B", 40) } }
+    N:Start(places, boat)
+    N:Update(spot(0.10, 0.50, 0))
+    m = N:Update(spot(0.20, 0.50, 10))
+    check(m.phase == "underway", "the boat has left")
+    local count = #timed
+    m = N:Update(spot(0.36, 0.44, 40))          -- ashore: 143 yards from the dock, 121 from B
+    check(m.index == 2 and m.kind == "walk", "ashore short of the dock: on to the walk: " .. tostring(m.index))
+    check(#timed == count, "and the ride isn't measured")
+
+    -- Not seen leaving: the boat isn't passed (it may not have left at all).
+    N:Start(places, boat)
+    N:Update(spot(0.10, 0.50, 0))
+    m = N:Update(spot(0.11, 0.50, 5))           -- 25 yards: still at the dock
+    check(m.index == 1 and m.phase == "waiting", "waiting at the dock is not passing the boat")
+
+    -- A walk to a zone border is passed once the player is in the zone beyond it, however they crossed (by the river,
+    -- not the road). BORDER_DUROTAR_TO_THE_BARRENS is on Durotar's map; its pair on the Barrens'.
+    local durotarSide = addon.World:GetNode("BORDER_DUROTAR_TO_THE_BARRENS")
+    local barrens = addon.World:GetNode("BORDER_THE_BARRENS_TO_DUROTAR").mapID
+    local wp = { id = "P_WP", mapID = barrens, x = 0.55, y = 0.10 }
+    local crossing = { name = "Crossing", stops = { { place = wp } } }
+    N:Start(crossing, { steps = { step("walk", "YOU", "BORDER_DUROTAR_TO_THE_BARRENS", 140), step("walk", "BORDER_DUROTAR_TO_THE_BARRENS", "P_WP", 110) } })
+    m = N:Update({ mapID = durotarSide.mapID, x = 0.46, y = 0.10, now = 0, onTaxi = false })
+    check(m.index == 1, "in Durotar: walking to the border")
+    m = N:Update({ mapID = durotarSide.mapID, x = 0.40, y = 0.15, now = 1, onTaxi = false })
+    check(m.index == 1, "still in Durotar, away from the border: still walking to it")
+    m = N:Update({ mapID = barrens, x = 0.60, y = 0.12, now = 2, onTaxi = false })
+    check(m.index == 2 and m.step.nodeID == "P_WP", "across the river into the Barrens: on to the waypoint: " .. tostring(m.index))
+
+    -- Planning again keeps the destination; a tour, its stops still to come.
+    check(N:ReplanTarget() == crossing, "recalculating plans again to the same destination")
+    N:Stop()
+    check(N:ReplanTarget() == nil, "and with no trip there is nothing to plan")
+end

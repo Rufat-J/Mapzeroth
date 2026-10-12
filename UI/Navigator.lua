@@ -90,16 +90,21 @@ local function build()
 
     ui.title = Theme:Text(frame, "title")
     ui.title:SetPoint("TOPLEFT", PAD, -12)
-    ui.title:SetWidth(INNER - 130)
+    ui.title:SetWidth(INNER - 156)
     ui.title:SetWordWrap(false)
 
     ui.count = Theme:Text(frame, "dim")
-    ui.count:SetPoint("TOPRIGHT", -(PAD + 56), -15)
+    ui.count:SetPoint("TOPRIGHT", -(PAD + 82), -15)
     ui.count:SetJustifyH("RIGHT")
 
     ui.stop = Theme:Button(frame, L["NAV_STOP"], 50, 20)
     ui.stop:SetPoint("TOPRIGHT", -PAD, -12)
     ui.stop:SetScript("OnClick", function() Navigator:Stop() end)
+
+    -- Plan the route again from where the player is (they left it, and the steps no longer fit).
+    ui.recalc = Theme:IconButton(frame, 20, "reroute", L["NAV_RECALC"])
+    ui.recalc:SetPoint("TOPRIGHT", -(PAD + 56), -12)
+    ui.recalc:SetScript("OnClick", function() Navigator:Recalculate() end)
 
     ui.step = Theme:Text(frame, "body")
     ui.step:SetPoint("TOPLEFT", PAD, -38)
@@ -179,16 +184,25 @@ end
 
 -- The player flew somewhere the route didn't go (a mis-click; to change their mind they can stop and pick
 -- again): plan the way on from where they landed.
+-- Follows `plan` instead of the trip being followed; false when there is no plan to follow.
+local function restart(entry, plan)
+    if not (plan and #plan.steps > 0) then return false end
+    Navigation:Start(entry, plan, "NAV_REROUTED")
+    addon.Panel:OnRerouted(entry, plan)
+    ui.useStep = nil
+    Navigator:Tick()
+    return true
+end
+
 function Navigator:Replan(entry, returnTo)
-    local plan = Journey:PlanFromHere(entry, returnTo)
-    if plan and #plan.steps > 0 then
-        Navigation:Start(entry, plan, "NAV_REROUTED")
-        addon.Panel:OnRerouted(entry, plan)
-        ui.useStep = nil
-        self:Tick()
-    else
-        self:Stop()
-    end
+    if not restart(entry, Journey:PlanFromHere(entry, returnTo)) then self:Stop() end
+end
+
+-- The recalculate button: the rest of the trip planned again from here. If no route can be found from here, the trip
+-- goes on as it was.
+function Navigator:Recalculate()
+    local entry, returnTo = Navigation:ReplanTarget()
+    if entry then restart(entry, Journey:PlanFromHere(entry, returnTo)) end
 end
 
 -- Show the current model of the trip.
@@ -213,6 +227,8 @@ function Navigator:Render(model)
 
     local combat = InCombatLockdown()
     ui.title:SetText(model.destination or "")
+    -- Planning again only makes sense standing on the ground: not once there, nor in the air or at sea.
+    ui.recalc:SetShown(not (model.finished or model.offRoute or model.phase == "flying" or model.phase == "underway"))
 
     if model.finished then
         -- Arrived: leave it up for a moment, then clear the trip (the same as pressing Close).

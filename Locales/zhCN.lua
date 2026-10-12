@@ -108,6 +108,7 @@ addon:RegisterLocale("zhCN", {
     HINT_QUICKER      = "最快的路线可节省%s，但飞行需要%s。这是你负担得起的最快路线。",
     NAV_OFFROUTE      = "正在飞往%s。着陆后将更新路线。",
     NAV_REROUTED      = "路线已更新",
+    NAV_RECALC        = "从这里重新规划路线",
     NAV_WAIT_FLIGHT   = "与飞行管理员对话",
     NAV_FLYING        = "飞行中",
     NAV_LONGER        = "比预计时间更长",

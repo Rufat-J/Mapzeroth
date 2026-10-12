@@ -21,6 +21,7 @@ local definitions = {
     -- Forever, where nearly everyone starts a fresh character and has found nothing yet.
     assumeFlightsFound = { default = addon.RULESET ~= "forever", boolean = true },
     docked = { default = true, boolean = true },                          -- the panel: docked beside the map, or free-floating (UI/Panel.lua)
+    dockedHidden = { default = false, boolean = true },                   -- docked, the player hid it: the map opens without it, after a reload too
     hideSllcmHint = { default = false, boolean = true },                  -- the picker's pointer to Skyborne Ley Line & Convergence Marker, dismissed (UI/Panel.lua)
     hideMinimapButton = { default = false, boolean = true },              -- the button on the minimap rim (UI/MinimapButton.lua)
     roundTrip = { default = false, boolean = true },                      -- routes are there and back to here (UI/Panel.lua's choice on a route)

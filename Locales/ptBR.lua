@@ -108,6 +108,7 @@ addon:RegisterLocale("ptBR", {
     HINT_QUICKER      = "A rota mais rápida economizaria %s, mas seus voos custam %s. Esta é a mais rápida que você pode pagar.",
     NAV_OFFROUTE      = "Voando para %s. A rota será atualizada quando você pousar.",
     NAV_REROUTED      = "Rota atualizada",
+    NAV_RECALC        = "Recalcular a rota a partir daqui",
     NAV_WAIT_FLIGHT   = "Fale com o mestre de voo",
     NAV_FLYING        = "Em voo",
     NAV_LONGER        = "Demorando mais que o previsto",

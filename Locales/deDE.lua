@@ -110,6 +110,7 @@ addon:RegisterLocale("deDE", {
     HINT_QUICKER      = "Die schnellste Route würde %s sparen, aber ihre Flüge kosten %s. Dies ist die schnellste, die Ihr Euch leisten könnt.",
     NAV_OFFROUTE      = "Flug nach: %s. Die Route wird nach der Landung aktualisiert.",
     NAV_REROUTED      = "Route aktualisiert",
+    NAV_RECALC        = "Route von hier aus neu planen",
     NAV_WAIT_FLIGHT   = "Sprecht mit dem Flugmeister",
     NAV_FLYING        = "Im Flug",
     NAV_LONGER        = "Dauert länger als geplant",

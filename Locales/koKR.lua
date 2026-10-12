@@ -109,6 +109,7 @@ addon:RegisterLocale("koKR", {
     HINT_QUICKER      = "가장 빠른 경로는 %s 절약되지만 비행 요금이 %s 듭니다. 이 경로가 감당할 수 있는 가장 빠른 경로입니다.",
     NAV_OFFROUTE      = "비행 중: %s. 착륙하면 경로가 갱신됩니다.",
     NAV_REROUTED      = "경로 갱신됨",
+    NAV_RECALC        = "여기서 경로 다시 계산",
     NAV_WAIT_FLIGHT   = "비행 조련사에게 말을 거세요",
     NAV_FLYING        = "비행 중",
     NAV_LONGER        = "예상보다 오래 걸립니다",

@@ -109,6 +109,7 @@ addon:RegisterLocale("frFR", {
     HINT_QUICKER      = "L'itinéraire le plus rapide ferait gagner %s mais ses vols coûtent %s. Voici le plus rapide que vous pouvez payer.",
     NAV_OFFROUTE      = "En vol vers %s. L'itinéraire sera mis à jour à l'atterrissage.",
     NAV_REROUTED      = "Itinéraire mis à jour",
+    NAV_RECALC        = "Recalculer l'itinéraire depuis ici",
     NAV_WAIT_FLIGHT   = "Parlez au maître de vol",
     NAV_FLYING        = "En vol",
     NAV_LONGER        = "Plus long que prévu",

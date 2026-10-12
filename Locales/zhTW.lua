@@ -108,6 +108,7 @@ addon:RegisterLocale("zhTW", {
     HINT_QUICKER      = "最快的路線可節省%s，但飛行需要%s。這是你負擔得起的最快路線。",
     NAV_OFFROUTE      = "正在飛往%s。降落後將更新路線。",
     NAV_REROUTED      = "路線已更新",
+    NAV_RECALC        = "從這裡重新規劃路線",
     NAV_WAIT_FLIGHT   = "與飛行管理員對話",
     NAV_FLYING        = "飛行中",
     NAV_LONGER        = "比預計時間更久",

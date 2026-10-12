@@ -109,6 +109,7 @@ local strings = {
     HINT_QUICKER      = "La ruta más rápida ahorraría %s, pero sus vuelos cuestan %s. Esta es la más rápida que puedes pagar.",
     NAV_OFFROUTE      = "Volando a %s. La ruta se actualizará al aterrizar.",
     NAV_REROUTED      = "Ruta actualizada",
+    NAV_RECALC        = "Volver a planear la ruta desde aquí",
     NAV_WAIT_FLIGHT   = "Habla con el maestro de vuelo",
     NAV_FLYING        = "En vuelo",
     NAV_LONGER        = "Tarda más de lo previsto",

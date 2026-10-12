@@ -51,6 +51,13 @@ local function isDocked()
     return addon.Options:Get("docked")
 end
 
+-- Docked, whether the player has hidden the panel; kept in the settings, so the map still opens without it after a
+-- reload or the next login.
+local function setDockedHidden(hidden)
+    state.dockedHidden = hidden
+    addon.Options:Store("dockedHidden", hidden)
+end
+
 -- ---------------------------------------------------------------------------------------
 -- Building
 
@@ -299,6 +306,7 @@ local function build(parent)
     ui.start:SetScript("OnClick", function() Panel:StartRoute() end)
 
     Panel:ApplyScale()
+    state.dockedHidden = addon.Options:Get("dockedHidden")
     Panel:SetDocked(addon.Options:Get("docked"), true)
 end
 
@@ -1373,7 +1381,7 @@ function Panel:OnMapShown()
     if not state.docked then return end
     if state.detached then
         state.detached = false                        -- the map is open now: the panel goes back beside it, and stays up
-        state.dockedHidden = false
+        setDockedHidden(false)
         attachToMap()
     end
     self:Reanchor()
@@ -1391,7 +1399,7 @@ function Panel:Toggle()
         local map = WorldMapFrame
         if map and map:IsShown() then
             if not ui then self:OnMapShown() end
-            state.dockedHidden = not state.dockedHidden
+            setDockedHidden(not state.dockedHidden)
             ui.frame:SetShown(not state.dockedHidden)
             if not state.dockedHidden then self:ShowContent() end
             return not state.dockedHidden
@@ -1403,7 +1411,8 @@ function Panel:Toggle()
             if map then attachToMap() end
             return false
         end
-        state.detached, state.dockedHidden = true, false       -- asked for, so it is not "hidden" any more
+        state.detached = true
+        setDockedHidden(false)                                 -- asked for, so it is not "hidden" any more
         attachToScreen()
         self:RestorePosition()
         ui.frame:Show()

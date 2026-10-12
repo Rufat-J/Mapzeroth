@@ -54,6 +54,7 @@ local ICONS = "Interface\\Icons\\"
 -- The pictures on icon buttons (Theme:IconButton), unless a theme has its own (buttonIcons).
 local BUTTON_ICONS = {
     edit = "Interface\\Buttons\\UI-GuildButton-PublicNote-Up",       -- the game's own "edit a note" pen
+    reroute = "Interface\\Buttons\\UI-RefreshButton",                -- the game's own circling arrow (group finder's refresh)
 }
 local STEP_ICONS = {
     walk        = { ICONS .. "Ability_Rogue_Sprint" },

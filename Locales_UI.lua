@@ -113,6 +113,7 @@ addon:RegisterLocale("enUS", {
     HINT_QUICKER      = "The quickest route would save %s but its flights cost %s. This is the fastest you can afford.",
     NAV_OFFROUTE      = "Flying to %s. The route updates when you land.",
     NAV_REROUTED      = "Route updated",
+    NAV_RECALC        = "Plan the route again from here",
     NAV_WAIT_FLIGHT   = "Speak to the flight master",
     NAV_FLYING        = "In flight",
     NAV_LONGER        = "Taking longer than planned",

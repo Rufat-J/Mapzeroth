@@ -350,7 +350,9 @@ WorldMapFrame._shown = true
 WorldMapFrame._hooks.OnShow()
 check(not state.detached and addon.Panel:GetFrame():IsShown(), "opening the map takes it back beside the map")
 check(addon.Panel:Toggle() == false and not addon.Panel:GetFrame():IsShown() and state.dockedHidden, "with the map open, toggling hides the panel")
+check(addon.Options:Get("dockedHidden") == true, "and the hidden panel is saved, so the next login opens the map without it")
 check(addon.Panel:Toggle() == true and addon.Panel:GetFrame():IsShown() and not state.dockedHidden, "and shows it again")
+check(addon.Options:Get("dockedHidden") == false, "showing it again saves that too")
 -- Hidden beside the open map, then the map closed and the panel stood up by itself: opening the map docks it, and keeps it up.
 addon.Panel:Toggle()
 check(state.dockedHidden, "hidden beside the map")
@@ -592,6 +594,22 @@ UnitOnTaxi = function() return false end
 addon.Navigator:Tick()
 check(addon.Navigation:IsActive() and nav.count._text == "Route updated", "on landing the route is planned again and says so: " .. tostring(nav.count._text))
 check(state.pinned and state.plan ~= oldPlan and state.plan and #state.plan.steps > 0, "the panel shows the new route")
+addon.Navigator:Stop()
+
+-- The recalculate button plans the rest of the trip again from where the player is, to the same place.
+startTrip()
+oldPlan = state.plan
+local entryBefore = state.entry
+check(nav.recalc._shown, "on the ground the recalculate button shows")
+nav.recalc._scripts.OnClick()
+check(addon.Navigation:IsActive() and nav.count._text == "Route updated", "clicking it plans again and says so: " .. tostring(nav.count._text))
+local recalcEntry = state.entry
+check(state.pinned and recalcEntry == entryBefore and state.plan ~= oldPlan and #state.plan.steps > 0, "the panel shows the new route to the same place")
+UnitOnTaxi = function() return true end
+addon.Navigation:Start(state.entry, { steps = { { method = "taxi", fromID = "TAXI_2", nodeID = "TAXI_6", seconds = 200, text = "Fly" } } })
+addon.Navigator:Tick()
+check(not nav.recalc._shown, "in the air it is hidden")
+UnitOnTaxi = function() return false end
 addon.Navigator:Stop()
 
 -- Before anything is typed: an accordion of sections, closed, and nothing priced until one is opened.
