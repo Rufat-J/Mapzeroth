@@ -109,6 +109,8 @@ addon:RegisterLocale("zhCN", {
     NAV_OFFROUTE      = "正在飞往%s。着陆后将更新路线。",
     NAV_REROUTED      = "路线已更新",
     NAV_RECALC        = "从这里重新规划路线",
+    CHAT_SHARE_LINE   = "[Mapzeroth] %s - %s (%.1f, %.1f)",
+    TIP_CHAT_SHARE    = "Shift-点击分享到聊天",
     NAV_WAIT_FLIGHT   = "与飞行管理员对话",
     NAV_FLYING        = "飞行中",
     NAV_LONGER        = "比预计时间更长",

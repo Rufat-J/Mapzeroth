@@ -114,6 +114,8 @@ addon:RegisterLocale("enUS", {
     NAV_OFFROUTE      = "Flying to %s. The route updates when you land.",
     NAV_REROUTED      = "Route updated",
     NAV_RECALC        = "Plan the route again from here",
+    CHAT_SHARE_LINE   = "[Mapzeroth] %s - %s (%.1f, %.1f)",
+    TIP_CHAT_SHARE    = "Shift-click to share in chat",
     NAV_WAIT_FLIGHT   = "Speak to the flight master",
     NAV_FLYING        = "In flight",
     NAV_LONGER        = "Taking longer than planned",

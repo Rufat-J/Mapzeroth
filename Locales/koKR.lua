@@ -110,6 +110,8 @@ addon:RegisterLocale("koKR", {
     NAV_OFFROUTE      = "비행 중: %s. 착륙하면 경로가 갱신됩니다.",
     NAV_REROUTED      = "경로 갱신됨",
     NAV_RECALC        = "여기서 경로 다시 계산",
+    CHAT_SHARE_LINE   = "[Mapzeroth] %s - %s (%.1f, %.1f)",
+    TIP_CHAT_SHARE    = "Shift-클릭으로 대화창에 공유",
     NAV_WAIT_FLIGHT   = "비행 조련사에게 말을 거세요",
     NAV_FLYING        = "비행 중",
     NAV_LONGER        = "예상보다 오래 걸립니다",

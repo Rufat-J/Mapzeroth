@@ -109,6 +109,8 @@ addon:RegisterLocale("zhTW", {
     NAV_OFFROUTE      = "正在飛往%s。降落後將更新路線。",
     NAV_REROUTED      = "路線已更新",
     NAV_RECALC        = "從這裡重新規劃路線",
+    CHAT_SHARE_LINE   = "[Mapzeroth] %s - %s (%.1f, %.1f)",
+    TIP_CHAT_SHARE    = "Shift-點擊分享到聊天",
     NAV_WAIT_FLIGHT   = "與飛行管理員對話",
     NAV_FLYING        = "飛行中",
     NAV_LONGER        = "比預計時間更久",

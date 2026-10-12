@@ -111,6 +111,8 @@ addon:RegisterLocale("deDE", {
     NAV_OFFROUTE      = "Flug nach: %s. Die Route wird nach der Landung aktualisiert.",
     NAV_REROUTED      = "Route aktualisiert",
     NAV_RECALC        = "Route von hier aus neu planen",
+    CHAT_SHARE_LINE   = "[Mapzeroth] %s - %s (%.1f, %.1f)",
+    TIP_CHAT_SHARE    = "Umschalt-Klick zum Teilen im Chat",
     NAV_WAIT_FLIGHT   = "Sprecht mit dem Flugmeister",
     NAV_FLYING        = "Im Flug",
     NAV_LONGER        = "Dauert länger als geplant",

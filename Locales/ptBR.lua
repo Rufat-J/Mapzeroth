@@ -109,6 +109,8 @@ addon:RegisterLocale("ptBR", {
     NAV_OFFROUTE      = "Voando para %s. A rota será atualizada quando você pousar.",
     NAV_REROUTED      = "Rota atualizada",
     NAV_RECALC        = "Recalcular a rota a partir daqui",
+    CHAT_SHARE_LINE   = "[Mapzeroth] %s - %s (%.1f, %.1f)",
+    TIP_CHAT_SHARE    = "Shift-clique para compartilhar no chat",
     NAV_WAIT_FLIGHT   = "Fale com o mestre de voo",
     NAV_FLYING        = "Em voo",
     NAV_LONGER        = "Demorando mais que o previsto",

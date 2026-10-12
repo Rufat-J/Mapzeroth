@@ -111,6 +111,8 @@ addon:RegisterLocale("ruRU", {
     NAV_OFFROUTE      = "Полет: %s. Маршрут обновится после приземления.",
     NAV_REROUTED      = "Маршрут обновлен",
     NAV_RECALC        = "Проложить маршрут заново отсюда",
+    CHAT_SHARE_LINE   = "[Mapzeroth] %s - %s (%.1f, %.1f)",
+    TIP_CHAT_SHARE    = "Shift-клик, чтобы поделиться в чате",
     NAV_WAIT_FLIGHT   = "Поговорите с распорядителем полетов",
     NAV_FLYING        = "В полете",
     NAV_LONGER        = "Дольше, чем ожидалось",

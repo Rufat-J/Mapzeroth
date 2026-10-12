@@ -426,6 +426,23 @@ check(not inCompartment() and #AddonCompartmentFrame.registeredAddons == 1 and r
 AddonCompartmentFrame = nil
 addon.Panel:SetDocked(true)
 
+-- Shift-click on a place: it goes into chat (ChatShare.lua), and the route isn't opened.
+addon.Panel:Query("ironforge flight")
+do
+    local shared
+    local realShare, realModified = addon.ChatShare.Share, IsModifiedClick
+    addon.ChatShare.Share = function(_, entry) shared = entry; return true end
+    IsModifiedClick = function(kind) return kind == "CHATLINK" end
+    local row
+    for _, r in ipairs(addon.Panel.widgets.rows) do
+        local entry = state.results[r.index or 0]
+        if entry and entry.group == "flight" then row = r break end
+    end
+    row._scripts.OnClick(row)
+    check(shared and shared.group == "flight" and state.view == "list", "shift-click shares the place and stays on the list")
+    addon.ChatShare.Share, IsModifiedClick = realShare, realModified
+end
+
 -- Route view: no waypoint, a Start button, and choosing does the pricing.
 addon.Panel:Query("ironforge flight")
 local fm

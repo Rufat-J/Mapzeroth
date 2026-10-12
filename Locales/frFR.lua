@@ -110,6 +110,8 @@ addon:RegisterLocale("frFR", {
     NAV_OFFROUTE      = "En vol vers %s. L'itinéraire sera mis à jour à l'atterrissage.",
     NAV_REROUTED      = "Itinéraire mis à jour",
     NAV_RECALC        = "Recalculer l'itinéraire depuis ici",
+    CHAT_SHARE_LINE   = "[Mapzeroth] %s - %s (%.1f, %.1f)",
+    TIP_CHAT_SHARE    = "Maj-clic pour partager dans le chat",
     NAV_WAIT_FLIGHT   = "Parlez au maître de vol",
     NAV_FLYING        = "En vol",
     NAV_LONGER        = "Plus long que prévu",

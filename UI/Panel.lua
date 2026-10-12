@@ -151,7 +151,12 @@ local function build(parent)
         row.sub:SetPoint("BOTTOMLEFT", 14, 5)
         row.sub:SetWidth(INNER - 14 - 8)
         row.sub:SetWordWrap(false)
-        row:SetScript("OnClick", function(self) Panel:Choose(self.index) end)
+        row:SetScript("OnClick", function(self)
+            -- Shift-click (the game's chat-link click): the place goes into chat instead (ChatShare.lua).
+            local chatLink = IsModifiedClick and IsModifiedClick("CHATLINK") or (IsShiftKeyDown and IsShiftKeyDown())
+            if chatLink and addon.ChatShare:Share(state.results[self.index]) then return end
+            Panel:Choose(self.index)
+        end)
         row:HookScript("OnEnter", function(self) Panel:ShowRowTooltip(self) end)
         row:HookScript("OnLeave", function(self) Theme:HideTooltip(self) end)
         -- A saved route's pen, at the row's right: its editor, without planning it first.
@@ -617,6 +622,7 @@ end
 function Panel:ShowRowTooltip(row)
     local entry = row.index and state.results[row.index]
     local lines = Panel.TooltipLines(entry, addon:GetPlayerContext())      -- fresh: what they know may have changed
+    if lines and addon.ChatShare:CanShare(entry) then lines[#lines + 1] = { L["TIP_CHAT_SHARE"], "dim" } end
     if lines then Theme:ShowTooltip(row, lines) end
 end
 

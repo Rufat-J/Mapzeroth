@@ -95,6 +95,7 @@ MultiRoute.lua
 Navigation.lua
 MapRoute.lua
 LeyShare.lua
+ChatShare.lua
 
 # UI
 UI\Theme.lua
