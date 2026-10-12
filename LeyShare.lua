@@ -25,7 +25,8 @@ local VERSION = "1"
 local TTL = 60 * 60                  -- a sighting is dropped this many seconds after it was made
 local FUTURE = 60                    -- a sighting stamped further ahead than this is refused
 local SAME_YARDS = 60                -- two sightings closer than this (same phase, same map) are the same node
-local QUERY_GAP = 30                 -- least seconds between our own Q for one phase
+local REPLY_MINE = { 1, 3 }          -- seconds to wait before answering a Q, holding a sighting of our own for its phase
+local REPLY_OTHERS = { 4, 12 }       -- and holding only others' (so the one who saw it usually answers first)
 local MAX_PER_REPLY = 9              -- entries per S message, keeps it under 255 bytes
 -- Forever's channel allowance is about 10 at once, then ~0.8 a second, and retrying while refused keeps it refusing.
 local SEND_GAP = 1.25
@@ -47,8 +48,9 @@ local tentativeNpc       -- read from one NPC kind only: any other reading repla
 local candidates = {}    -- candidates[phase] = { [npcID] = true, n = count }
 local waiting            -- an own sighting made before the phase was known
 local pending            -- a racial whose buff couldn't be read (combat): checked when combat ends
-local lastQuery = {}     -- lastQuery[phase] = GetTime()
-local replyFor           -- the phase we mean to answer a Q for
+local asked = {}         -- asked[phase] = true: our own Q for it has gone out (once a session)
+local joinedAt           -- GetTime() of first joining the channel this session: no Q after TTL seconds on it
+local answering = {}     -- answering[phase] = a token while an answer to a Q for it waits (an S for it cancels)
 local queue, sending = {}, false
 local me = {}            -- our own name as senders show it (the server echoes our messages back)
 local nodeMaps           -- mapID -> true where our faction has nodes (built once)
@@ -296,7 +298,7 @@ function LeyShare:WithShared(nodeIDs)
 end
 
 -- Keep a sighting (ours or someone else's). Returns true when it was kept.
-local function add(p, mapID, x, y, t)
+local function add(p, mapID, x, y, t, mine)
     local now = GetServerTime()
     if not (C_Map.GetMapInfo(mapID) and x >= 0 and x <= 1 and y >= 0 and y <= 1) then return false end
     if t > now + FUTURE or now - t > TTL then return false end
@@ -308,10 +310,11 @@ local function add(p, mapID, x, y, t)
     for _, e in ipairs(list) do
         if e.phase == p and near(mapID, e.x, e.y, x, y) then
             if t > e.t then e.x, e.y, e.t = x, y, t end
+            if mine then e.mine = true end
             return true
         end
     end
-    list[#list + 1] = { phase = p, x = x, y = y, t = t }
+    list[#list + 1] = { phase = p, x = x, y = y, t = t, mine = mine or nil }
     return true
 end
 
@@ -370,15 +373,18 @@ local function coord(v)
     return math.floor(v * 10000 + 0.5)
 end
 
+-- Ask once a session per phase, and only in the first hour on the channel: every R and S reaches every client
+-- whatever its phase, so after that there is nothing from before we joined left to ask for.
 local function query()
-    if not phase or not hasNodes(phaseMap) then return end
-    if GetTime() - (lastQuery[phase] or -QUERY_GAP) < QUERY_GAP then return end
-    lastQuery[phase] = GetTime()
+    if not joinedAt and channelIndex() then joinedAt = GetTime() end
+    if not phase or not hasNodes(phaseMap) or asked[phase] then return end
+    if not joinedAt or GetTime() - joinedAt > TTL then return end
+    asked[phase] = true
     send(("Q:%s:%s:%s"):format(VERSION, factionTag(), phase))
 end
 
 local function broadcast(mapID, x, y, t)
-    add(phase, mapID, x, y, t)
+    add(phase, mapID, x, y, t, true)
     send(("R:%s:%s:%s:%d:%d:%d:%d"):format(VERSION, factionTag(), phase, mapID, coord(x), coord(y), t))
 end
 
@@ -396,10 +402,7 @@ end
 -- Receiving
 ---------------------------------------------------------------------------
 
-local function sendReply()
-    local p = replyFor
-    replyFor = nil
-    if not p then return end
+local function sendReply(p)
     local entries = {}
     for mapID, list in pairs(ownReports()) do
         prune(list)
@@ -427,19 +430,29 @@ function LeyShare:OnMessage(text)
     if kind == "R" and rest then
         addFields(p, strsplit(":", rest))
     elseif kind == "Q" then
-        -- Answer after a random wait, unless someone else answers first.
-        if p == replyFor then return end
+        -- Answer after a random wait, unless someone else answers first: a short one when we saw a node there
+        -- ourselves, a longer one when we only heard of it. One wait per phase.
+        if answering[p] then return end
+        local held, mine = false, false
         for _, list in pairs(ownReports()) do
             for _, r in ipairs(list) do
                 if r.phase == p and GetServerTime() - r.t <= TTL then
-                    replyFor = p
-                    C_Timer.After(1 + math.random() * 3, sendReply)
-                    return
+                    held = true
+                    if r.mine then mine = true end
                 end
             end
         end
+        if not held then return end
+        local wait = mine and REPLY_MINE or REPLY_OTHERS
+        local token = {}
+        answering[p] = token
+        C_Timer.After(wait[1] + math.random() * (wait[2] - wait[1]), function()
+            if answering[p] ~= token then return end        -- someone else answered (and maybe a new Q came since)
+            answering[p] = nil
+            sendReply(p)
+        end)
     elseif kind == "S" and rest then
-        if p == replyFor then replyFor = nil end
+        answering[p] = nil
         for entry in rest:gmatch("[^;]+") do addFields(p, strsplit(",", entry)) end
     end
 end
@@ -621,6 +634,7 @@ local function hideFromChat()
 end
 
 local function join()
+    if not joinedAt and channelIndex() then joinedAt = GetTime() end      -- on it since about now (joining takes a moment)
     if not LeyShare:Networking() or channelIndex() or clean(IsInInstance()) then return end
     pcall(JoinTemporaryChannel, channelName())
     -- The chat frames pick the channel up a moment after joining.
@@ -700,9 +714,10 @@ end
 
 -- Tests only: forget everything held in memory.
 function LeyShare:ResetForTests()
-    phase, phaseMap, tentativeNpc, waiting, pending, replyFor, nodeMaps = nil, nil, nil, nil, nil, nil, nil
+    phase, phaseMap, tentativeNpc, waiting, pending, joinedAt, nodeMaps = nil, nil, nil, nil, nil, nil, nil
     wipe(candidates)
-    wipe(lastQuery)
+    wipe(asked)
+    wipe(answering)
     wipe(queue)
     wipe(worldCache)
     sending = false

@@ -33,8 +33,8 @@ C_Map = {
     -- 2500 x 1700 yards a map, like useTestDistances; each map its own continent, so maps never meet.
     GetWorldPosFromMapPos = function(id, v) return id, CreateVector2D(v.x * 2500, v.y * 1700) end,
 }
-local timers = {}
-C_Timer = { After = function(_, fn) timers[#timers + 1] = fn end }
+local timers, delays = {}, {}
+C_Timer = { After = function(delay, fn) timers[#timers + 1] = fn; delays[#delays + 1] = delay end }
 local function runTimers()
     for _ = 1, 50 do
         local list = timers
@@ -56,7 +56,7 @@ addon.Options:Set("shareSightings", true)
 local function reset()
     LS:ResetForTests()
     MapzerothRebuildDB.sightings, MapzerothRebuildDB.sharedNodes = nil, nil
-    sent, timers = {}, {}
+    sent, timers, delays = {}, {}, {}
 end
 
 check(LS:Networking(), "a Skyborne with sharing on joins in")
@@ -88,7 +88,7 @@ clock = clock + 5
 LS:ReadGUID("Creature-0-1-2-3104-1234-0006")
 LS:ReadGUID("Creature-0-1-2-3104-5678-0007")
 runTimers()
-check(LS:Phase() == "3104" and #sent == 2, "messages go out 1.25 s apart; asking again for a phase waits 30 s: " .. #sent)
+check(LS:Phase() == "3104" and #sent == 2, "messages go out 1.25 s apart; a phase is asked about once a session: " .. #sent)
 
 -- Receiving: R, the same node again (newer kept), a stale one, one from the future, the other faction, a bad version.
 reset()
@@ -170,6 +170,50 @@ LS:OnMessage("Q:1:A:5555")
 runTimers()
 check(#sent == 0, "a phase we hold nothing for isn't answered")
 check(#MapzerothRebuildDB.sightings.A[1417] == 11, "the S's entry was kept as a new node")
+
+-- How long before answering: 4-12 s holding only others' sightings, 1-3 s holding one of our own (so whoever saw it
+-- usually answers). One wait per phase: a Q for another phase doesn't replace it, an S for another doesn't cancel it.
+reset()
+LS:ReadGUID("Creature-0-1-2-3104-1234-0001")
+LS:OnMessage(r(2530, 3000, now - 60))                                   -- someone else's, in 3104
+LS:OnMessage("R:1:A:5555:1417:2530:3000:" .. (now - 60))               -- and in 5555
+runTimers()
+sent, delays = {}, {}
+LS:OnMessage("Q:1:A:3104")
+check(#delays == 1 and delays[1] >= 4 and delays[1] <= 12, "only others' sightings: a 4-12 s wait: " .. tostring(delays[1]))
+LS:OnMessage("Q:1:A:3104")
+check(#delays == 1, "a second Q for the same phase while waiting adds no second answer")
+LS:OnMessage("Q:1:A:5555")
+check(#delays == 2, "a Q for another phase gets its own wait")
+LS:OnMessage("S:1:A:5555:1417,2530,3000," .. (now - 5))
+runTimers()
+check(#sent == 1 and sent[1]:find("^S:1:A:3104:"), "an S for 5555 cancels only 5555's answer: " .. tostring(sent[1]))
+LS:OnConfirmed(1417, 0.48, 0.605, now)                                  -- our own find, in 3104
+runTimers()
+sent, delays = {}, {}
+LS:OnMessage("Q:1:A:3104")
+check(#delays == 1 and delays[1] >= 1 and delays[1] <= 3, "holding our own: a 1-3 s wait: " .. tostring(delays[1]))
+runTimers()
+check(#sent == 1 and sent[1]:find("4800,6050", 1, true), "and the answer carries it: " .. tostring(sent[1]))
+
+-- Asking: once a session per phase, and not after the first hour on the channel.
+reset()
+LS:ReadGUID("Creature-0-1-2-3104-1234-0001")
+runTimers()
+check(#sent == 1 and sent[1] == "Q:1:A:3104", "a new phase is asked about")
+clock = clock + 120
+LS:ReadGUID("Creature-0-1-2-4200-1111-0003")
+LS:ReadGUID("Vehicle-0-1-2-4200-2222-0005")
+LS:ReadGUID("Creature-0-1-2-3104-1234-0006")
+LS:ReadGUID("Creature-0-1-2-3104-5678-0007")
+runTimers()
+check(#sent == 2 and sent[2] == "Q:1:A:4200" and LS:Phase() == "3104",
+    "4200 is asked about once, and back in 3104 minutes later, 3104 isn't again: " .. #sent)
+clock = clock + 3600
+LS:ReadGUID("Creature-0-1-2-6000-1111-0008")
+LS:ReadGUID("Vehicle-0-1-2-6000-2222-0009")
+runTimers()
+check(LS:Phase() == "6000" and #sent == 2, "after an hour on the channel nothing is asked: every R and S since has been heard")
 
 -- Our own find: before the phase is known it waits, and goes out once it is (in the same zone).
 reset()
