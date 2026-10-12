@@ -177,6 +177,7 @@ addon:RegisterLocale("itIT", {
     TIP_CONVERGENCE   = "Una possibile convergenza elementale: può comparire qui, ma forse ora non è attiva.",
     TIP_SEEN          = "%d viste nella tua fase nell'ultima ora: il percorso va alla più vicina.",
     ROUTE_SEEN        = "Vista nella tua fase %d min fa.",
+    DISCORD_TITLE     = "Mapzeroth su Discord",
     SHARE_TITLE       = "Condividere gli avvistamenti di linee di energia e convergenze?",
     SHARE_TEXT        = "Quando la razziale del tuo personaggio Skyborne conferma una linea di energia o una convergenza elementale, Mapzeroth può inviare dove si trova e in quale fase sei ai giocatori che usano Skyborne Ley Line & Convergence Marker. Quell'addon mostra gli avvistamenti sulla mappa del mondo.\n\nIn cambio, Mapzeroth riceve i loro avvistamenti, e Linea di energia più vicina o Convergenza elementale più vicina porta a una vista nella tua fase nell'ultima ora, quando c'è.",
     SHARE_LATER       = "Puoi cambiarlo in seguito nelle impostazioni di Mapzeroth.",

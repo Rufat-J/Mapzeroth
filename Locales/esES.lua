@@ -177,6 +177,7 @@ local strings = {
     TIP_CONVERGENCE   = "Una posible convergencia elemental: puede aparecer aquí, pero quizá no esté activa ahora.",
     TIP_SEEN          = "%d vistas en tu fase en la última hora: la ruta va a la más cercana.",
     ROUTE_SEEN        = "Vista en tu fase hace %d min.",
+    DISCORD_TITLE     = "Mapzeroth en Discord",
     SHARE_TITLE       = "¿Compartir avistamientos de líneas ley y convergencias?",
     SHARE_TEXT        = "Cuando el racial de tu personaje Skyborne confirma una línea ley o una convergencia elemental, Mapzeroth puede enviar dónde está y en qué fase estás a los jugadores que usan Skyborne Ley Line & Convergence Marker. Ese addon muestra estos avistamientos en el mapa del mundo.\n\nA cambio, Mapzeroth recibe sus avistamientos, y Línea ley más cercana o Convergencia elemental más cercana va a una vista en tu fase en la última hora cuando la hay.",
     SHARE_LATER       = "Puedes cambiarlo más tarde en la configuración de Mapzeroth.",

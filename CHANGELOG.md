@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.7.0
+
+### Added
+- **Multi-stop routes.** Paste `/way` lines, or use your TomTom waypoints, and Mapzeroth plans the quickest order through every stop. The navigator takes you through them one stop at a time.
+- **Saved routes.** Save a pasted or TomTom route under a name, then edit its stops or delete it later. Saved routes appear in a "Saved Routes" section of the picker on every character.
+- **Share ley line and convergence sightings** (Skyborne, off unless you choose it). When your racial confirms a ley line or elemental convergence, Mapzeroth can share where it is and which phase you're in with players using Skyborne Ley Line & Convergence Marker, and receive theirs. "Nearest Ley Line" / "Nearest Elemental Convergence" then goes to one seen in your phase in the last hour ("Seen in your phase 12 min ago"), including spots shared by other players that Mapzeroth doesn't list yet. You're asked once; the setting is on the settings page. If you use Skyborne Ley Line & Convergence Marker, it does the sharing and Mapzeroth uses its sightings.
+- **Dungeons and Raids sections** in the picker: the ones at or below your level by the game's own group finder range, highest first.
+- **Your route on the map before you start.** A route shows on the world map as soon as you pick it, not only once you press Start.
+- **New theme: Cartographer**, a dark parchment look.
+- **Time bar.** A bar under a route's total shows how the time splits between walking, flights, boats and teleports.
+- **Picker settings page.** A checkbox for each pick at the top of the list (Waypoint, Nearest Ley Line, your trainers...), to hide the ones you don't use.
+- **Undercity's two levels.** The gate leads into the ruins above; routes take one of the three elevators down into the city.
+- **More ley lines and convergences:** 28 more ley lines and 14 more convergences, 64 and 44 in all.
+- **Addon compartment.** With the minimap button hidden, Mapzeroth is listed in the minimap's addon menu instead.
+- Tooltips on the Nearest Ley Line / Elemental Convergence picks and on routes.
+- **Discord button** on the settings page, for questions and support for tr0tsky's addons. It gives you the invite link to copy.
+
+### Changed
+- **The route on the map is redrawn:** smooth dotted lines on foot and dashed for flights, colours that stand out on the map, small dots where steps begin, and a ring with an arrow where a teleport leaves and lands. Lines and markers scale with the map's zoom. Opening the map with a long route no longer stutters.
+- The minimap shows the same lines and markers as the world map.
+- **Navigator:** a new arrow that turns smoothly as you move, and the Cast / Use button shows the spell's or item's icon.
+- **The picker opens instantly:** picks are one line each, and the travel time is worked out when you choose one. One Way / Round Trip is now a choice on the route itself (remembered), instead of separate "(one way)" and "(round trip)" entries.
+- Modern Dark numbers the stops of a multi-stop route and colours each step's time by how you travel.
+- New characters: flight points are no longer assumed found until a flight master shows which ones you have. The "Assume flight points are found" setting brings back the old behaviour.
+- Mulgore now borders Stonetalon Mountains and Desolace, and the Tirisfal Glades / Silverpine Forest crossing has moved.
+- The entrances to Dalaran and the Excavation Site are in new positions.
+- Starter translations for the new text in all supported languages.
+
+### Fixed
+- An error in combat when a route used a teleport (the game hides cooldowns from addons in combat).
+- Flight steps show the flight master's boot icon; it was blank.
+- The route on the minimap follows square minimaps.
+- Navigator: a boat or zeppelin you're already on counts down the ride, not the average wait plus ride.
+- Flight prices: fares learned before you got Frequent Flier are forgotten, so prices are right afterwards.
+
 ## 0.6.1
 
 ### Added

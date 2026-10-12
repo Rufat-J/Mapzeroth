@@ -39,6 +39,12 @@ local FLAT = "Interface\\Buttons\\WHITE8x8"
 -- Our own arrow pointing up (tools/gen_media.py): white and a paler grey half, on a dark edge, tinted with the accent.
 -- Drawn large and scaled down, so it stays crisp at any size.
 local ARROW = "Interface\\AddOns\\" .. addonName .. "\\Media\\Arrow"
+-- Buttons in another brand's colours, the same in every theme (Theme:BrandButton): its fill, its fill under the mouse,
+-- and its logo (white, Media/, from tools/gen_media.py). The text and logo are white.
+local BRANDS = {
+    discord = { fill = { 0.345, 0.396, 0.949 }, hover = { 0.278, 0.322, 0.769 },      -- Discord's blurple, #5865F2
+                logo = "Interface\\AddOns\\" .. addonName .. "\\Media\\Discord" },
+}
 
 -- The picture beside a route step when the player shows icons instead of colour chips (the stepMarkers setting).
 -- Each is a list of candidates, the first the client has winning: the classic clients lack some later art, so the
@@ -316,6 +322,16 @@ skin.button = function(button, opts)
         button:SetBackdropBorderColor(Theme:Color(opts.primary and "primaryBg" or opts.action and "accent" or "panelBorder"))
         skin.text(button.label, { style = opts.primary and "primary" or "button" })
     end
+end
+
+skin.brandbutton = function(button, opts)
+    local brand = BRANDS[opts.brand]
+    button:SetBackdrop({ bgFile = FLAT, edgeFile = FLAT, edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+    local fill = button.mzHover and brand.hover or brand.fill
+    button:SetBackdropColor(fill[1], fill[2], fill[3], 1)
+    button:SetBackdropBorderColor(fill[1], fill[2], fill[3], 1)
+    button.label:SetFontObject(fontObject(current.fonts.body))
+    button.label:SetTextColor(1, 1, 1)
 end
 
 -- An icon button: in a flat theme a small button of the theme's colours round the picture; in the Blizzard one just
@@ -690,6 +706,29 @@ end
 
 -- A small square button showing a picture (`icon`: a name from BUTTON_ICONS, "edit"), for an action on a row.
 -- tooltip (optional): the text shown under the mouse.
+-- A button in another brand's colours (BRANDS: "discord"), its logo then `text`, the same in every theme. It sizes
+-- itself to fit the text.
+function Theme:BrandButton(parent, brand, text, height)
+    local button = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    local size = height - 8
+    button.logo = button:CreateTexture(nil, "ARTWORK")
+    button.logo:SetTexture(BRANDS[brand].logo)
+    button.logo:SetSize(size * 4 / 3, size)                  -- the picture is 4:3
+    button.logo:SetPoint("LEFT", 10, 0)
+    button.label = button:CreateFontString(nil, "OVERLAY")
+    button.label:SetPoint("LEFT", button.logo, "RIGHT", 6, 0)
+    local function hover(on)
+        button.mzHover = on
+        if current then skin.brandbutton(button, widgets[button].opts) end
+    end
+    button:SetScript("OnEnter", function() hover(true) end)
+    button:SetScript("OnLeave", function() hover(false) end)
+    register(button, "brandbutton", { brand = brand })
+    button.label:SetText(text)
+    button:SetSize(10 + size * 4 / 3 + 6 + (button.label:GetStringWidth() or 0) + 12, height)
+    return button
+end
+
 function Theme:IconButton(parent, size, icon, tooltip)
     local button = CreateFrame("Button", nil, parent, "BackdropTemplate")
     button:SetSize(size, size)

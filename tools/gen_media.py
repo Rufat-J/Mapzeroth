@@ -136,6 +136,21 @@ CHEVRON = [(36, 8), (61, 61), (36, 48), (11, 61)]
 LEFT_HALF = [(36, 8), (36, 48), (11, 61)]
 
 
+# --- The Discord logo (its mascot's face), white, for the settings page's Discord button: 64 x 48 over 24 x 18 ---------
+DISCORD_BODY = [(6.5, 3.0), (10, 2.8), (12, 4.6), (14, 2.8), (17.5, 3.0), (20.5, 10), (21, 14.5), (18.5, 15.5), (17, 13.6),
+                (12, 13.0), (7, 13.6), (5.5, 15.5), (3, 14.5), (3.5, 10)]
+
+
+def ellipse(cx, cy, rx, ry):
+    return lambda x, y: (math.hypot((x - cx) / rx, (y - cy) / ry) - 1) * min(rx, ry)
+
+
+def discord(x, y):
+    body = poly_sdf(x, y, DISCORD_BODY) - 1.2
+    eyes = min(ellipse(9, 9.8, 1.8, 2.1)(x, y), ellipse(15, 9.8, 1.8, 2.1)(x, y))
+    return max(body, -eyes)
+
+
 def main():
     for name, (period, t, core) in LINES.items():
         render(name + ".tga", TILE_W, TILE_H, period, t, [(core, 1.0)])
@@ -152,6 +167,7 @@ def main():
         (lambda x, y: poly_sdf(x, y, CHEVRON) - 0.5, 1.0),
         (lambda x, y: poly_sdf(x, y, LEFT_HALF), 0.68),
     ], aa=1.4)
+    render("Discord.tga", 64, 48, 24, 18, [(discord, 1.0)], aa=0.6)
 
 
 if __name__ == "__main__":

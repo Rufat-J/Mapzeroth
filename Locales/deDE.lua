@@ -178,6 +178,7 @@ addon:RegisterLocale("deDE", {
     TIP_CONVERGENCE   = "Eine mögliche Elementarkonvergenz: Hier kann eine erscheinen, sie ist aber vielleicht gerade nicht da.",
     TIP_SEEN          = "%d in Eurer Phase in der letzten Stunde gesehen: Die Route führt zur nächsten davon.",
     ROUTE_SEEN        = "Vor %d Min. in Eurer Phase gesehen.",
+    DISCORD_TITLE     = "Mapzeroth auf Discord",
     SHARE_TITLE       = "Sichtungen von Leylinien und Konvergenzen teilen?",
     SHARE_TEXT        = "Wenn die Volksfähigkeit Eures Himmelsgeborenen eine Leylinie oder Elementarkonvergenz bestätigt, kann Mapzeroth den Ort und Eure Phase an Spieler mit Skyborne Ley Line & Convergence Marker senden. Dieses Addon zeigt die Sichtungen auf der Weltkarte.\n\nIm Gegenzug erhält Mapzeroth deren Sichtungen, und „Nächste Leylinie“ bzw. „Nächste Elementarkonvergenz“ führt zu einer, die in der letzten Stunde in Eurer Phase gesehen wurde, sofern es eine gibt.",
     SHARE_LATER       = "Ihr könnt das später in den Einstellungen von Mapzeroth ändern.",

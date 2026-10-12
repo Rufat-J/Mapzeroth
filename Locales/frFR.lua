@@ -177,6 +177,7 @@ addon:RegisterLocale("frFR", {
     TIP_CONVERGENCE   = "Une convergence élémentaire possible : elle peut apparaître ici, mais n'est peut-être pas active en ce moment.",
     TIP_SEEN          = "%d vues dans votre phase depuis une heure : l'itinéraire va à la plus proche.",
     ROUTE_SEEN        = "Vue dans votre phase il y a %d min.",
+    DISCORD_TITLE     = "Mapzeroth sur Discord",
     SHARE_TITLE       = "Partager les observations de lignes telluriques et de convergences ?",
     SHARE_TEXT        = "Quand le racial de votre personnage Skyborne confirme une ligne tellurique ou une convergence élémentaire, Mapzeroth peut envoyer son emplacement et votre phase aux joueurs qui utilisent Skyborne Ley Line & Convergence Marker. Cet addon affiche ces observations sur la carte du monde.\n\nEn retour, Mapzeroth reçoit leurs observations, et Ligne tellurique la plus proche ou Convergence élémentaire la plus proche mène à une observée dans votre phase depuis une heure, s'il y en a une.",
     SHARE_LATER       = "Vous pourrez changer cela plus tard dans les paramètres de Mapzeroth.",

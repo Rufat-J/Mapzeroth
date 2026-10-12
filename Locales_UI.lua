@@ -194,6 +194,7 @@ addon:RegisterLocale("enUS", {
     -- Sharing sightings (LeyShare.lua, UI/SharePrompt.lua). The addon's name stays in English.
     TIP_SEEN          = "%d seen in your phase in the last hour: the route goes to the nearest of those.",
     ROUTE_SEEN        = "Seen in your phase %d min ago.",
+    DISCORD_TITLE     = "Mapzeroth on Discord",
     SHARE_TITLE       = "Share ley line and convergence sightings?",
     SHARE_TEXT        = "When your Skyborne character's racial confirms a ley line or elemental convergence, Mapzeroth can send where it is and which phase you are in to players using Skyborne Ley Line & Convergence Marker. That addon shows these sightings on the world map.\n\nIn return, Mapzeroth receives their sightings, and Nearest Ley Line or Nearest Elemental Convergence goes to one seen in your phase in the last hour when there is one.",
     SHARE_LATER       = "You can change this later in Mapzeroth's settings.",

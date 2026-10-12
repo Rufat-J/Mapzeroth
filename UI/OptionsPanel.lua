@@ -2,7 +2,7 @@ local addonName, addon = ...
 
 -- The settings page, in the game's own Settings window (Game Menu > Options > AddOns >
 -- Mapzeroth, or /mapzeroth settings): how long a loading screen counts for in a route, the size of
--- our windows, the theme, whether the route is drawn on the map and on the minimap, icons or colour bars beside route steps, and (Forever) sharing ley line sightings. The page is built from our own themed widgets and handed to the
+-- our windows, the theme, whether the route is drawn on the map and on the minimap, icons or colour bars beside route steps, and (Forever) sharing ley line sightings; and by its title, the Discord invite. The page is built from our own themed widgets and handed to the
 -- game as a canvas, so it follows the theme like everything else. What the settings mean and
 -- how they are kept is Options.lua's; this file only draws them.
 --
@@ -196,6 +196,10 @@ function OptionsPanel:Build()
     local title = Theme:Text(box, "title")
     title:SetPoint("TOPLEFT", PAD, -(PAD - 8))
     title:SetText(L["OPT_TITLE"])
+    -- Top right, level with the title: the Discord invite, offered to copy (the game can't open links).
+    widgets.discord = Theme:BrandButton(box, "discord", "Discord", 24)
+    widgets.discord:SetPoint("TOPRIGHT", box, "TOPRIGHT", -PAD, -(PAD - 10))
+    widgets.discord:SetScript("OnClick", function() addon.LinkPopup:Show(L["DISCORD_TITLE"], addon.DISCORD_URL) end)
 
     widgets.tax = sliderRow(box, 64, "loadingScreenTax", L["OPT_TAX"], L["OPT_TAX_DESC"],
         function(v) return L["OPT_SECONDS"]:format(v) end)

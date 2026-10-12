@@ -18,6 +18,9 @@ addon.SLLCM_NAME = "Skyborne Ley Line & Convergence Marker"
 addon.SLLCM_URL = "https://www.curseforge.com/wow/addons/sllcm"
 addon.SLLCM_FOLDERS = { "SkyborneLeyLineConvergenceMarker", "SkyborneLeyLineConvergenceMarker-Dev" }
 
+-- The author's Discord for addon development (a permanent invite): the settings page's Community row offers it to copy.
+addon.DISCORD_URL = "https://discord.gg/KkcnJPQQ5M"
+
 -- Seconds added per loading screen when totalling a route.
 addon.DEFAULT_LOADING_SCREEN_TAX = 10     -- the player can change it (Options.lua)
 

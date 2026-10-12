@@ -176,6 +176,7 @@ addon:RegisterLocale("zhCN", {
     TIP_CONVERGENCE   = "潜在元素汇聚点：这里可能出现，但现在不一定存在。",
     TIP_SEEN          = "过去一小时内在你的位面发现了 %d 个：路线前往其中最近的一个。",
     ROUTE_SEEN        = "%d 分钟前在你的位面发现。",
+    DISCORD_TITLE     = "Mapzeroth 的 Discord",
     SHARE_TITLE       = "共享魔网线和汇聚点的发现？",
     SHARE_TEXT        = "当你的 Skyborne 角色用种族技能确认一条魔网线或元素汇聚点时，Mapzeroth 可以把它的位置和你所在的位面发送给使用 Skyborne Ley Line & Convergence Marker 的玩家。该插件会在世界地图上显示这些发现。\n\n作为回报，Mapzeroth 会接收他们的发现；如果过去一小时内在你的位面有发现，“最近的魔网线”或“最近的元素汇聚点”会前往那里。",
     SHARE_LATER       = "之后可以在 Mapzeroth 的设置中更改。",

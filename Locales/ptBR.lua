@@ -176,6 +176,7 @@ addon:RegisterLocale("ptBR", {
     TIP_CONVERGENCE   = "Uma possível Convergência Elemental: pode aparecer aqui, mas talvez não esteja ativa agora.",
     TIP_SEEN          = "%d vistas na sua fase na última hora: a rota vai para a mais próxima.",
     ROUTE_SEEN        = "Vista na sua fase há %d min.",
+    DISCORD_TITLE     = "Mapzeroth no Discord",
     SHARE_TITLE       = "Compartilhar avistamentos de linhas de Ley e convergências?",
     SHARE_TEXT        = "Quando o racial do seu personagem Skyborne confirma uma linha de Ley ou uma Convergência Elemental, o Mapzeroth pode enviar onde ela está e em qual fase você está para jogadores que usam Skyborne Ley Line & Convergence Marker. Esse addon mostra os avistamentos no mapa-múndi.\n\nEm troca, o Mapzeroth recebe os avistamentos deles, e Linha de Ley mais próxima ou Convergência Elemental mais próxima vai para uma vista na sua fase na última hora, quando houver.",
     SHARE_LATER       = "Você pode mudar isso depois nas configurações do Mapzeroth.",

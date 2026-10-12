@@ -177,6 +177,7 @@ addon:RegisterLocale("koKR", {
     TIP_CONVERGENCE   = "잠재 원소 융합점: 여기에 나타날 수 있지만 지금은 없을 수도 있습니다.",
     TIP_SEEN          = "지난 1시간 동안 내 위상에서 %d곳 발견: 경로는 그중 가장 가까운 곳으로 갑니다.",
     ROUTE_SEEN        = "%d분 전 내 위상에서 발견됨.",
+    DISCORD_TITLE     = "Discord의 Mapzeroth",
     SHARE_TITLE       = "지맥과 융합점 발견 정보를 공유할까요?",
     SHARE_TEXT        = "Skyborne 캐릭터의 종족 특성이 지맥이나 원소 융합점을 확인하면, Mapzeroth가 그 위치와 현재 위상을 Skyborne Ley Line & Convergence Marker 사용자에게 보낼 수 있습니다. 그 애드온은 발견 정보를 세계 지도에 표시합니다.\n\n대신 Mapzeroth도 그들의 발견 정보를 받아, 가장 가까운 지맥 또는 가장 가까운 원소 융합점이 지난 1시간 동안 내 위상에서 발견된 곳이 있으면 그곳으로 안내합니다.",
     SHARE_LATER       = "나중에 Mapzeroth 설정에서 바꿀 수 있습니다.",

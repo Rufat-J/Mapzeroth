@@ -890,6 +890,13 @@ Options:Set("shareSightings", false)
 C_AddOns = realLoaded
 addon.OptionsPanel.widgets.share = savedShare
 
+-- The Discord button (top right, Discord's colours and logo in any theme) offers the invite to copy, nothing to dismiss.
+check(pw.discord.label:GetText() == "Discord" and pw.discord.logo._texture:find("Media\\Discord", 1, true), "a Discord button with its logo")
+pw.discord._scripts.OnClick()
+check(addon.LinkPopup:IsShown() and addon.LinkPopup.widgets.box:GetText() == "https://discord.gg/KkcnJPQQ5M", "the Discord button offers the invite")
+check(addon.LinkPopup.widgets.title:GetText() == "Mapzeroth on Discord" and not addon.LinkPopup.widgets.hide._shown, "under its own title, no \"don't show again\"")
+addon.LinkPopup:Hide()
+
 -- The page scrolls when the Settings window is shorter than the settings, and doesn't when they fit.
 do
     local sc = pw.scroll
