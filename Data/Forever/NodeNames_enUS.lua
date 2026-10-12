@@ -24,6 +24,7 @@ addon:RegisterLocale("enUS", {
     NODE_DOCK_SKYWATCHER           = "Skywatcher Plateau Airship Dock",
     NODE_DOCK_STEAMWHEEDLE         = "Steamwheedle Port",
     NODE_DOCK_THERAMORE            = "Theramore Isle Harbor",
+    NODE_MANKRIKS_WIFE             = "Mankrik's Wife",
     NODE_PORTAL_DARNASSUS_RUTTHERAN = "Gate to Rut'theran Village",
     NODE_PORTAL_RUTTHERAN_DARNASSUS = "Gate to Darnassus",
     NODE_TELEPORT_MOONGLADE        = "Moonglade Teleport Landing",

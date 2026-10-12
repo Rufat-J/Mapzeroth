@@ -272,3 +272,23 @@ do
     check(section(withExpansion, "cities") and section(withExpansion, "towns"),
         "Forever with a CURRENT_EXPANSION set still lists cities and towns")
 end
+
+-- An easter egg: Mankrik's wife is a destination, filed in no section and no pick, so only a search finds her.
+do
+    local all, list = sectionsFor({ class = "WARRIOR", faction = "Horde", level = 60 })
+    local wife = addon.Destinations:Find(list, "MANKRIKS_WIFE")
+    check(wife and wife.group == "other", "Mankrik's wife is a destination of no kind")
+    local function holds(items)
+        for _, item in ipairs(items or {}) do
+            for _, id in ipairs(item.nodeIDs or { item.nodeID }) do
+                if id == "MANKRIKS_WIFE" then return true end
+            end
+        end
+    end
+    local listed = holds(all.top) or all.index.MANKRIKS_WIFE ~= nil
+    for _, s in ipairs(all) do listed = listed or holds(s.items) end
+    check(not listed, "but no section or pick lists her")
+    local found = addon.Search:Query(list, "mankrik", 5)
+    check(found[1] and found[1].nodeID == "MANKRIKS_WIFE", "searching finds her")
+    check(addon.L["NODE_MANKRIKS_WIFE"] == "Mankrik's Wife", "by her name")
+end

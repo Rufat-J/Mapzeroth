@@ -87,4 +87,8 @@ addon.Nodes.Kalimdor = {
     { id = "PORTAL_DARNASSUS_RUTTHERAN", container = "kalimdor.teldrassil",   mapID = 1457, x = 0.3032, y = 0.4136 }, -- Darnassus portal to Rut'theran Village (city has no flight master of its own; mapID is Darnassus's own map, container is Teldrassil)
     { id = "TELEPORT_MOONGLADE", container = "kalimdor.moonglade",          mapID = 1450, x = 0.5627, y = 0.3241 }, -- Druid Teleport: Moonglade landing spot (captured live). Ability data (spell ID, cast time, cooldown) still to come
     { id = "DOCK_SKYWATCHER",   container = "kalimdor.mulgore",              mapID = 1412, x = 0.3430, y = 0.2576 }, -- Skywatcher Plateau (ship to/from Zephras Isle)
+
+    -- An easter egg: Mankrik's wife (NPC 10668, "Beaten Corpse"; Wowhead Forever). No kind, so the picker files her
+    -- as "other": never listed in a section, only found by searching for her.
+    { id = "MANKRIKS_WIFE",     container = "kalimdor.the_barrens",          mapID = 1413, x = 0.4920, y = 0.5040 },
 }
