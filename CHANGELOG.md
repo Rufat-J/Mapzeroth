@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.8.0
+
+### Added
+- **Shortcuts count.** The navigator moves on to the next step as soon as you're closer to where it goes next than the current step's end is. That includes cutting across a field instead of following the road, or jumping off a boat before it docks. A walk to a zone border also counts as done once you're in the next zone, however you crossed (swimming a river instead of taking the bridge, say).
+- **Recalculate button** on the navigator. Plans the rest of the trip again from where you are, keeping the remaining stops of a multi-stop route and the way back of a round trip.
+- **Shift-click a place in the picker to share it in chat.** It puts the place's name, zone and coordinates in your chat box, along with the game's own map pin, so anyone who clicks it gets the spot as their waypoint. Shift-clicking a "Nearest..." pick shares the nearest one.
+- **"How it works"** on the ley line sharing question and on its setting. Point at it to see exactly what is sent, an example message, what it's used for, and how to turn it off.
+
+### Changed
+- If you hide the window while it's docked to the map, it now stays hidden after a reload or login.
+- Ley line sharing asks the channel less often and answers more politely, matching Skyborne Ley Line & Convergence Marker.
+- Starter translations for the new text in all supported languages.
+
 ## 0.7.0
 
 ### Added
