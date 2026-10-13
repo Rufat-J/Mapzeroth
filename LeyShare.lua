@@ -36,6 +36,8 @@ local SCAN_SECONDS = 60              -- re-read nameplates this often (the shard
 local RESTORE_SECONDS = 300          -- a phase saved at logout or /reload is picked up again only this soon after
 local REJOIN_SECONDS = 60
 local SETTLE_SECONDS, SETTLE_MAX = 3, 30
+local REORDER_SECONDS = 60           -- after joining, game channels arriving above ours get moved below it this long
+local MAX_SWAPS = 10                 -- channel swaps allowed per join (the game has about 10 channels)
 -- The racials, and the buff each gives: 15 minutes standing on a node, 15-30 s anywhere else.
 local RACIALS = { [1259705] = true, [1259686] = true }   -- Read Ley Line (Alliance), Skysight (Horde)
 local BUFFS = { 1259691, 1270893 }                        -- Energized (Alliance), Elemental Blessing (Horde)
@@ -56,6 +58,8 @@ local me = {}            -- our own name as senders show it (the server echoes o
 local nodeMaps           -- mapID -> true where our faction has nodes (built once)
 local worldCache = {}    -- node id -> { x, y, continent }
 local joinStarted, scanning
+local reorderUntil       -- GetTime() until which our channel is kept numbered after the game's
+local swapsLeft = 0      -- channel swaps still allowed in that time
 
 -- nil for a secret value (encounters, combat) or a failed read.
 local function clean(v)
@@ -633,9 +637,60 @@ local function hideFromChat()
     end
 end
 
+-- Channel names shown in any chat window, lowercased.
+local function shownChannels()
+    local shown = {}
+    if not GetChatWindowChannels then return shown end
+    for i = 1, NUM_CHAT_WINDOWS or 10 do
+        local list = { GetChatWindowChannels(i) }      -- name, zone for each channel
+        for j = 1, #list, 2 do
+            if type(list[j]) == "string" then shown[list[j]:lower()] = true end
+        end
+    end
+    return shown
+end
+
+-- The numbers of the channels people chat in, lowest first: the game's own (General, Trade, Services...) and custom
+-- ones shown in a chat window. A custom channel shown nowhere is an addon's, as ours is: we never move one, so an
+-- addon doing the same as us can't swap back and forth with ours.
+local function chatChannelNumbers()
+    local out = {}
+    if not (GetNumDisplayChannels and GetChannelDisplayInfo) then return out end
+    local shown = shownChannels()
+    for i = 1, GetNumDisplayChannels() or 0 do
+        local name, header, _, number, _, _, category = GetChannelDisplayInfo(i)
+        local chat = category == "CHANNEL_CATEGORY_WORLD"
+            or (category == "CHANNEL_CATEGORY_CUSTOM" and type(name) == "string" and shown[name:lower()])
+        if not header and type(number) == "number" and number > 0 and chat then
+            out[#out + 1] = number
+        end
+    end
+    table.sort(out)
+    return out
+end
+
+-- Move our channel past every chat channel numbered above it, one swap at a time, so General, Trade, a player's
+-- guild-alliance channel and the rest keep /1, /2, /3. A new channel takes the lowest free number, so joining before
+-- they come in (a slow login, a rejoin racing them after a loading screen) takes /1. Each swap moves ours up and a
+-- chat channel down, so it stops; the budget is for an addon that rearranges channels itself, or one that leaves
+-- its own channel showing in chat (it looks like a chat channel, and might move back past ours).
+function LeyShare:KeepChannelLast()
+    local swap = C_ChatInfo and C_ChatInfo.SwapChatChannelsByChannelIndex
+    local ours = channelIndex()
+    if not swap or not ours then return end
+    for _, n in ipairs(chatChannelNumbers()) do
+        if n > ours then
+            if swapsLeft <= 0 or not pcall(swap, ours, n) then return end
+            swapsLeft = swapsLeft - 1
+            ours = n
+        end
+    end
+end
+
 local function join()
     if not joinedAt and channelIndex() then joinedAt = GetTime() end      -- on it since about now (joining takes a moment)
     if not LeyShare:Networking() or channelIndex() or clean(IsInInstance()) then return end
+    reorderUntil, swapsLeft = GetTime() + REORDER_SECONDS, MAX_SWAPS
     pcall(JoinTemporaryChannel, channelName())
     -- The chat frames pick the channel up a moment after joining.
     C_Timer.After(1, hideFromChat)
@@ -654,6 +709,8 @@ local function start(atLogin)
     end
     joinStarted = true
     local function begin()
+        swapsLeft = MAX_SWAPS
+        LeyShare:KeepChannelLast()                     -- still on it from before a /reload, perhaps as /1
         join()
         C_Timer.NewTicker(REJOIN_SECONDS, join)        -- rejoin if kicked, /left, or lost to a client hiccup
     end
@@ -666,7 +723,8 @@ local function start(atLogin)
     ticker = C_Timer.NewTicker(1, function()
         local now, count = GetTime(), select("#", GetChannelList())
         if count ~= last then last, changedAt = count, now end
-        if now - changedAt >= SETTLE_SECONDS or now - started >= SETTLE_MAX then
+        -- Quiet for a moment once the first channel is in: an empty list for a few seconds is the login, not settled.
+        if (count > 0 and now - changedAt >= SETTLE_SECONDS) or now - started >= SETTLE_MAX then
             ticker:Cancel()
             begin()
         end
@@ -712,8 +770,9 @@ function LeyShare:Stats()
              shared = #self:SharedPlaces() }
 end
 
--- Tests only: forget everything held in memory.
-function LeyShare:ResetForTests()
+-- Tests only: forget everything held in memory, and allow this many channel swaps (none if omitted).
+function LeyShare:ResetForTests(swaps)
+    reorderUntil, swapsLeft = nil, swaps or 0
     phase, phaseMap, tentativeNpc, waiting, pending, joinedAt, nodeMaps = nil, nil, nil, nil, nil, nil, nil
     wipe(candidates)
     wipe(asked)
@@ -735,6 +794,7 @@ events:RegisterEvent("PLAYER_ENTERING_WORLD")
 events:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 events:RegisterEvent("PLAYER_REGEN_ENABLED")
 events:RegisterEvent("CHAT_MSG_ADDON")
+events:RegisterEvent("CHANNEL_UI_UPDATE")
 events:RegisterEvent("NAME_PLATE_UNIT_ADDED")
 events:RegisterEvent("PLAYER_TARGET_CHANGED")
 events:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
@@ -747,6 +807,8 @@ events:SetScript("OnEvent", function(_, event, ...)
         if prefix ~= PREFIX or type(text) ~= "string" or type(sender) ~= "string" then return end
         sender = Ambiguate(sender, "none")
         if not me[sender] then LeyShare:OnMessage(text) end
+    elseif event == "CHANNEL_UI_UPDATE" then             -- a channel joined or left (our own swaps fire it too)
+        if reorderUntil and GetTime() < reorderUntil then LeyShare:KeepChannelLast() end
     elseif event == "NAME_PLATE_UNIT_ADDED" then
         readUnit((...))
     elseif event == "PLAYER_TARGET_CHANGED" then

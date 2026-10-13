@@ -280,3 +280,51 @@ check(not LS:ShouldAsk(), "nobody else is")
 UnitRace = function() return "Skyborne", "Skyborne", 99 end
 addon.SharePrompt:Answer(false)
 check(not LS:ShouldAsk() and not addon.Options:Get("shareSightings"), "Leave Off: asked no more, still off")
+
+-- Channel numbers: joined ahead of the channels people chat in (the game's, and custom ones shown in a chat window),
+-- ours moves past them. Another addon's channel (hidden from chat) is never touched, so one doing the same as us
+-- can't swap back and forth with ours.
+local slots = { [1] = "SLLCMShareA", [2] = "General", [3] = "OtherAddon", [4] = "GuildChat", [5] = "Trade" }
+local custom = { SLLCMShareA = true, OtherAddon = true, GuildChat = true }
+function GetChatWindowChannels(i)
+    if i == 1 then return "General", 1, "Trade", 2, "guildchat", 0 end
+end
+local savedName, savedChat = GetChannelName, C_ChatInfo
+local swaps = 0
+function GetNumDisplayChannels() return 11 end           -- a header, then a row for each of the 10 numbers
+function GetChannelDisplayInfo(i)
+    if i == 1 then return "World", true end
+    local n, name = i - 1, slots[i - 1]
+    if not name then return nil, false, false, nil end
+    return name, false, false, n, 0, true, custom[name] and "CHANNEL_CATEGORY_CUSTOM" or "CHANNEL_CATEGORY_WORLD"
+end
+function GetChannelName(name)
+    for n, v in pairs(slots) do if v == name then return n end end
+    return 0
+end
+C_ChatInfo = { SwapChatChannelsByChannelIndex = function(a, b)
+    slots[a], slots[b] = slots[b], slots[a]
+    swaps = swaps + 1
+end }
+LS:ResetForTests()
+LS:KeepChannelLast()
+check(swaps == 0, "no swaps outside a join's allowance")
+LS:ResetForTests(10)
+LS:KeepChannelLast()
+check(slots[1] == "General" and slots[2] == "GuildChat" and slots[3] == "OtherAddon" and slots[4] == "Trade"
+    and slots[5] == "SLLCMShareA", "ours goes past the game's channels and the shown one; the other addon's stays /3: "
+    .. tostring(slots[1]) .. " " .. tostring(slots[2]) .. " " .. tostring(slots[3]) .. " " .. tostring(slots[5]))
+swaps = 0
+LS:KeepChannelLast()
+check(swaps == 0, "already past them: nothing moves")
+slots = { [1] = "SLLCMShareA", [2] = "General", [3] = "Trade" }
+LS:ResetForTests(1)
+LS:KeepChannelLast()
+check(slots[1] == "General" and slots[2] == "SLLCMShareA", "the allowance runs out, and it stops")
+C_ChatInfo = {}
+slots = { [1] = "SLLCMShareA", [2] = "General" }
+LS:ResetForTests(10)
+LS:KeepChannelLast()
+check(slots[1] == "SLLCMShareA", "a client without the swap is left alone")
+GetChannelName, C_ChatInfo, GetNumDisplayChannels, GetChannelDisplayInfo, GetChatWindowChannels =
+    savedName, savedChat, nil, nil, nil
