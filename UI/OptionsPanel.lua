@@ -18,7 +18,8 @@ local Options = addon.Options
 
 local PAD = 20
 local CONTENT_HEIGHT = 864      -- how tall the settings are laid out; the page scrolls when the window is shorter
-local SHARE_ROW = 80            -- and the extra row for sharing ley line sightings, on a dataset with ley lines (Forever)
+local SHARE_ROW = 104           -- and the extra row for sharing ley line sightings, on a dataset with ley lines (Forever),
+                                -- with its "How it works" link under the description
 local widgets = {}
 local menuHost                  -- where the dropdowns' lists go: outside the scrolled part, so they aren't clipped
 
@@ -235,6 +236,8 @@ function OptionsPanel:Build()
 
     if addon.LeyLineSpell then
         widgets.share = toggleRow(box, 856, "shareSightings", L["OPT_SHARE"], L["OPT_SHARE_DESC"])
+        widgets.shareHow = Theme:Link(box, L["SHARE_HOW"], function() return addon.SharePrompt:HowItWorksLines() end)
+        widgets.shareHow:SetPoint("TOPLEFT", widgets.share.hint, "BOTTOMLEFT", 0, -6)
         if addon.LeyShare:SllcmLoaded() then
             -- That addon shares instead (and has its own setting): say so in the title, grey the row out.
             widgets.share.title:SetText(L["OPT_SHARE_SLLCM_TITLE"])

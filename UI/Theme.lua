@@ -750,6 +750,21 @@ function Theme:IconButton(parent, size, icon, tooltip)
     return register(button, "iconbutton", { icon = icon })
 end
 
+-- A line of accent text that shows a tooltip when pointed at or clicked: lines(), called each time, gives the tooltip's
+-- lines as Theme:ShowTooltip takes them. The button is sized to its text; its FontString is button.label.
+function Theme:Link(parent, text, lines)
+    local button = CreateFrame("Button", nil, parent)
+    button.label = self:Text(button, "accent")
+    button.label:SetPoint("LEFT")
+    button.label:SetText(text)
+    button:SetSize(math.ceil(button.label:GetStringWidth() or 0) + 2, math.ceil(button.label:GetStringHeight() or 12) + 4)
+    local function show() Theme:ShowTooltip(button, lines()) end
+    button:SetScript("OnEnter", show)
+    button:SetScript("OnClick", show)
+    button:SetScript("OnLeave", function() Theme:HideTooltip(button) end)
+    return button
+end
+
 -- A box for several lines of text (pasting a list into), looking like an edit box. The text scrolls with the mouse
 -- wheel and follows the cursor. Returns the box; its EditBox is box.edit.
 function Theme:TextArea(parent, width, height)

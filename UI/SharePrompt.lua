@@ -18,6 +18,31 @@ local ASK_DELAY = 5             -- seconds after login, so it doesn't land in th
 
 local ui
 
+-- The wire format, shown as an example in "How it works": a Horde sighting in The Barrens (LeyShare.lua's R message).
+local EXAMPLE = "R:1:H:4417:1413:4521:3087:1791763200"
+
+-- What sharing does, in detail: the tooltip behind the "How it works" link here and on the settings page.
+function SharePrompt:HowItWorksLines()
+    return {
+        { L["SHARE_HOW_TITLE"], "title" },
+        { L["SHARE_HOW_INTRO"], "body" },
+        { " ", "body" },
+        { L["SHARE_HOW_SENT_HEAD"], "accent" },
+        { L["SHARE_HOW_SENT"], "body" },
+        { EXAMPLE, "dim" },
+        { L["SHARE_HOW_SENT_KEY"], "body" },
+        { " ", "body" },
+        { L["SHARE_HOW_USE_HEAD"], "accent" },
+        { L["SHARE_HOW_USE"], "body" },
+        { " ", "body" },
+        { L["SHARE_HOW_EXPIRY_HEAD"], "accent" },
+        { L["SHARE_HOW_EXPIRY"], "body" },
+        { " ", "body" },
+        { L["SHARE_HOW_OFF_HEAD"], "accent" },
+        { L["SHARE_HOW_OFF"]:format(L["OPT_SHARE"]), "body" },
+    }
+end
+
 local function build()
     ui = {}
     SharePrompt.widgets = ui                -- for tests
@@ -47,6 +72,9 @@ local function build()
     ui.later:SetWordWrap(true)
     ui.later:SetText(L["SHARE_LATER"])
 
+    ui.how = Theme:Link(frame, L["SHARE_HOW"], function() return SharePrompt:HowItWorksLines() end)
+    ui.how:SetPoint("TOPLEFT", ui.later, "BOTTOMLEFT", 0, -8)
+
     ui.decline = Theme:Button(frame, L["SHARE_DECLINE"], 130, 24)
     ui.decline:SetPoint("BOTTOMLEFT", PAD, PAD)
     ui.decline:SetScript("OnClick", function() SharePrompt:Answer(false) end)
@@ -58,8 +86,8 @@ end
 
 -- Height from the wrapped text: the frame grows to fit the language it is in.
 local function fit()
-    local h = PAD + ui.title:GetStringHeight() + 12 + ui.text:GetStringHeight() + 12 + ui.later:GetStringHeight()
-        + 16 + 24 + PAD
+    local h = PAD + (ui.title:GetStringHeight() or 0) + 12 + (ui.text:GetStringHeight() or 0) + 12
+        + (ui.later:GetStringHeight() or 0) + 8 + (ui.how:GetHeight() or 0) + 16 + 24 + PAD
     ui.frame:SetHeight(math.ceil(h))
 end
 
@@ -77,7 +105,10 @@ end
 function SharePrompt:Answer(on)
     addon.Options:Store("shareAsked", true)
     addon.Options:Set("shareSightings", on)
-    if ui then ui.frame:Hide() end
+    if ui then
+        Theme:HideTooltip(ui.how)
+        ui.frame:Hide()
+    end
 end
 
 local events = CreateFrame("Frame")

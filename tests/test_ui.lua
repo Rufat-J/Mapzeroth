@@ -958,6 +958,27 @@ addon.OptionsPanel:Build()
 local sw = addon.OptionsPanel.widgets.share
 check(sw.title:GetText() == "Share ley line sightings (Disabled, SLLCM installed)" and sw.disabled, "with SLLCM loaded the row says why and is greyed out")
 check(sw.hint:GetText() == addon.L["OPT_SHARE_DESC"], "and still describes the setting")
+-- "How it works", under the setting and on the first-run prompt: pointing at either shows the same details.
+do
+    local realTip, shown = GameTooltip, {}
+    GameTooltip = { SetOwner = function() end, AddLine = function(_, text) shown[#shown + 1] = text end,
+                    Show = function() end, Hide = function() end, IsOwned = function() return true end }
+    local how = addon.OptionsPanel.widgets.shareHow
+    check(how and how.label:GetText() == addon.L["SHARE_HOW"], "the sharing setting has a How it works link")
+    how._scripts.OnEnter()
+    check(shown[1] == addon.L["SHARE_HOW_TITLE"] and #shown == #addon.SharePrompt:HowItWorksLines(), "pointing at it shows the details")
+    local example = false
+    for _, text in ipairs(shown) do example = example or text:find("^R:1:[AH]:%d+:%d+:%d+:%d+:%d+$") ~= nil end
+    check(example, "with an example message in the wire format")
+    check(shown[#shown]:find(addon.L["OPT_SHARE"], 1, true), "and names the setting that turns it off")
+    addon.SharePrompt:Show()
+    local prompt = addon.SharePrompt.widgets
+    shown = {}
+    prompt.how._scripts.OnClick()
+    check(prompt.how.label:GetText() == addon.L["SHARE_HOW"] and shown[1] == addon.L["SHARE_HOW_TITLE"], "and so does the prompt's")
+    prompt.frame:Hide()
+    GameTooltip = realTip
+end
 Options:Set("shareSightings", true)
 addon.OptionsPanel:Sync()
 check(sw.button.label._text == "Off", "and shows Off, whatever is saved: " .. tostring(sw.button.label._text))
