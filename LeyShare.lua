@@ -15,6 +15,7 @@ local addonName, addon = ...
 -- Rules: off until the player says yes (Options "shareSightings", asked once per account by UI/SharePrompt.lua);
 -- Skyborne characters only; and when SLLCM itself is loaded, Mapzeroth sends nothing and joins nothing, reading
 -- SLLCM's sightings instead (its SavedVariables table, live), so no sighting goes out twice. Nothing here prints.
+-- Besides the racial, a node blip found on the minimap (LeyScan.lua) is a sighting too (OnMinimapNode).
 
 local LeyShare = {}
 addon.LeyShare = LeyShare
@@ -43,6 +44,9 @@ local RACIALS = { [1259705] = true, [1259686] = true }   -- Read Ley Line (Allia
 local BUFFS = { 1259691, 1270893 }                        -- Energized (Alliance), Elemental Blessing (Horde)
 local MIN_BUFF = 60
 local CHECK_TRIES, CHECK_GAP = 4, 0.5
+-- A minimap blip isn't sent when the node has a sighting from anyone in this phase this recently: a scan passes the
+-- same node every 30 yards or minute, and every R reaches the whole faction (SLLCM's scans use the same gap).
+local MINIMAP_GAP = 10 * 60
 
 local phase              -- the current phase (zoneUID as a string), nil until learned
 local phaseMap           -- the map it was read on
@@ -166,6 +170,15 @@ local function worldPos(mapID, x, y)
     if not ok or not pos then return nil end
     local wx, wy = pos:GetXY()
     return wx, wy, continent
+end
+
+-- A map's width and height in yards, nil when the client can't place it (LeyScan.lua). World axes are swapped
+-- relative to the map's.
+function LeyShare:ZoneSizeYards(mapID)
+    local ax, ay = worldPos(mapID, 0, 0)
+    local bx, by = worldPos(mapID, 1, 1)
+    if not (ax and bx) then return nil end
+    return math.abs(by - ay), math.abs(bx - ax)
 end
 
 local function yardsApart(ax, ay, ac, bx, by, bc)
@@ -400,6 +413,17 @@ function LeyShare:OnConfirmed(mapID, x, y, t)
     else
         waiting = { mapID = mapID, x = x, y = y, t = t }
     end
+end
+
+-- A node blip found on the minimap (LeyScan.lua), which shows only while the node is up in the player's phase: sent
+-- like a racial's sighting, unless this phase has a sighting of it from the last MINIMAP_GAP seconds.
+function LeyShare:OnMinimapNode(mapID, x, y)
+    if not (self:Networking() and addon.Options:Get("detectMinimapNodes")) then return end
+    local now = GetServerTime()
+    for _, r in ipairs(ownReports()[mapID] or {}) do
+        if r.phase == phase and now - r.t < MINIMAP_GAP and near(mapID, r.x, r.y, x, y) then return end
+    end
+    self:OnConfirmed(mapID, x, y, now)
 end
 
 ---------------------------------------------------------------------------

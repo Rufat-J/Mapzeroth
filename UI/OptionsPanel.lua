@@ -18,8 +18,9 @@ local Options = addon.Options
 
 local PAD = 20
 local CONTENT_HEIGHT = 864      -- how tall the settings are laid out; the page scrolls when the window is shorter
-local SHARE_ROW = 104           -- and the extra row for sharing ley line sightings, on a dataset with ley lines (Forever),
-                                -- with its "How it works" link under the description
+local SHARE_ROW = 104           -- and the extra rows for sharing ley line sightings, on a dataset with ley lines (Forever):
+                                -- sharing, with its "How it works" link under the description,
+local DETECT_ROW = 80           -- and finding nodes on the minimap
 local widgets = {}
 local menuHost                  -- where the dropdowns' lists go: outside the scrolled part, so they aren't clipped
 
@@ -190,7 +191,7 @@ function OptionsPanel:Build()
     frame.name = L["OPT_TITLE"]
     self.frame = frame
 
-    local panel, box, fit, scroll = scrolledPage(frame, CONTENT_HEIGHT + (addon.LeyLineSpell and SHARE_ROW or 0))
+    local panel, box, fit, scroll = scrolledPage(frame, CONTENT_HEIGHT + (addon.LeyLineSpell and SHARE_ROW + DETECT_ROW or 0))
     menuHost = panel
     widgets.scroll = scroll
 
@@ -238,11 +239,15 @@ function OptionsPanel:Build()
         widgets.share = toggleRow(box, 856, "shareSightings", L["OPT_SHARE"], L["OPT_SHARE_DESC"])
         widgets.shareHow = Theme:Link(box, L["SHARE_HOW"], function() return addon.SharePrompt:HowItWorksLines() end)
         widgets.shareHow:SetPoint("TOPLEFT", widgets.share.hint, "BOTTOMLEFT", 0, -6)
+        widgets.detect = toggleRow(box, 856 + SHARE_ROW, "detectMinimapNodes", L["OPT_DETECT"], L["OPT_DETECT_DESC"])
         if addon.LeyShare:SllcmLoaded() then
-            -- That addon shares instead (and has its own setting): say so in the title, grey the row out.
+            -- That addon shares and scans instead (and has its own settings): say so in the titles, grey the rows out.
             widgets.share.title:SetText(L["OPT_SHARE_SLLCM_TITLE"])
-            Theme:SetTextStyle(widgets.share.title, "dim")
-            widgets.share:SetEnabled(false)
+            widgets.detect.title:SetText(L["OPT_DETECT_SLLCM_TITLE"])
+            for _, row in ipairs({ widgets.share, widgets.detect }) do
+                Theme:SetTextStyle(row.title, "dim")
+                row:SetEnabled(false)
+            end
         end
     end
 
@@ -269,6 +274,7 @@ function OptionsPanel:Sync()
     widgets.hideMinimap:SetValue(Options:Get("hideMinimapButton"))
     -- Off while SLLCM is loaded, whatever is saved: Mapzeroth isn't sharing then.
     if widgets.share then widgets.share:SetValue(not widgets.share.disabled and Options:Get("shareSightings")) end
+    if widgets.detect then widgets.detect:SetValue(not widgets.detect.disabled and Options:Get("detectMinimapNodes")) end
     for _, check in ipairs(widgets.picks or {}) do check:SetChecked(Options:ShowsPick(check.key)) end
 end
 

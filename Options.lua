@@ -30,6 +30,8 @@ local definitions = {
     -- off until the player says yes to the question (UI/SharePrompt.lua), asked once per account.
     shareSightings = { default = false, boolean = true },
     shareAsked = { default = false, boolean = true },
+    -- While sharing: ley line and convergence blips on the minimap are found without hovering them and shared (LeyScan.lua).
+    detectMinimapNodes = { default = true, boolean = true },
 }
 
 -- "showPick_<key>": whether the picker offers that pick (a top pick or one of the trainers) (Sections.lua names the
