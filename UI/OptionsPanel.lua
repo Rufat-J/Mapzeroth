@@ -19,7 +19,7 @@ local Options = addon.Options
 local PAD = 20
 local CONTENT_HEIGHT = 864      -- how tall the settings are laid out; the page scrolls when the window is shorter
 local SHARE_ROW = 104           -- and the extra rows for sharing ley line sightings, on a dataset with ley lines (Forever):
-                                -- sharing, with its "How it works" link under the description,
+                                -- sharing, with its "How it works" link between its title and description,
 local DETECT_ROW = 80           -- and finding nodes on the minimap
 local widgets = {}
 local menuHost                  -- where the dropdowns' lists go: outside the scrolled part, so they aren't clipped
@@ -238,7 +238,10 @@ function OptionsPanel:Build()
     if addon.LeyLineSpell then
         widgets.share = toggleRow(box, 856, "shareSightings", L["OPT_SHARE"], L["OPT_SHARE_DESC"])
         widgets.shareHow = Theme:Link(box, L["SHARE_HOW"], function() return addon.SharePrompt:HowItWorksLines() end)
-        widgets.shareHow:SetPoint("TOPLEFT", widgets.share.hint, "BOTTOMLEFT", 0, -6)
+        -- Under the sharing title, ahead of its description: it covers both sharing rows.
+        widgets.shareHow:SetPoint("TOPLEFT", box, "TOPLEFT", PAD, -(856 + 20))
+        widgets.share.hint:ClearAllPoints()
+        widgets.share.hint:SetPoint("TOPLEFT", widgets.shareHow, "BOTTOMLEFT", 0, -6)
         widgets.detect = toggleRow(box, 856 + SHARE_ROW, "detectMinimapNodes", L["OPT_DETECT"], L["OPT_DETECT_DESC"])
         if addon.LeyShare:SllcmLoaded() then
             -- That addon shares and scans instead (and has its own settings): say so in the titles, grey the rows out.
