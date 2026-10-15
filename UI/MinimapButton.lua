@@ -104,6 +104,12 @@ function MinimapButton:Apply()
     self:SyncCompartment()
 end
 
+-- The ring is the minimap rim's look: when another addon gathers the button into its own bar (a button collector
+-- takes it off the minimap), the ring goes and the logo stands alone like the buttons beside it.
+function MinimapButton:SyncRing()
+    if button then button.ring:SetShown(button:GetParent() == Minimap) end
+end
+
 -- Builds the button (once). False where there is no minimap to put it on.
 function MinimapButton:Init()
     if button then return true end
@@ -120,6 +126,8 @@ function MinimapButton:Init()
     button:SetScript("OnDragStop", function(self) self:SetScript("OnUpdate", nil) end)
     button:SetScript("OnEnter", function() if not button:GetScript("OnUpdate") then MinimapButton:Tooltip() end end)
     button:SetScript("OnLeave", function() Theme:HideTooltip(button) end)
+    hooksecurefunc(button, "SetParent", function() MinimapButton:SyncRing() end)
+    self:SyncRing()
     self:Place()
     self:Apply()
     addon.Options:OnChange(function(key) if key == "hideMinimapButton" then MinimapButton:Apply() end end)

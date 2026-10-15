@@ -386,6 +386,14 @@ Minimap = mock()
 GetCursorPosition = function() return 0, 0 end
 check(addon.MinimapButton:Init() == true and addon.MinimapButton.button, "the minimap button is built")
 local mb = addon.MinimapButton
+mb.button._parent = Minimap
+mb:SyncRing()
+check(mb.button.ring:IsShown(), "on the minimap the button has its ring")
+mb.button._parent = mock()
+mb:SyncRing()
+check(not mb.button.ring:IsShown(), "gathered into another addon's bar, the ring goes")
+mb.button._parent = Minimap
+mb:SyncRing()
 check(mb:GetAngle() == 215, "it starts at the default angle")
 local x, y = mb.Offset(0, 70, 70, "ROUND")
 check(math.abs(x - 75) < 1e-9 and math.abs(y) < 1e-9, "at 0 degrees it sits on the right rim")
