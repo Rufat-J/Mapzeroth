@@ -41,7 +41,7 @@ import modern_ids
 import conversion_notes
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-SRC = pathlib.Path(r"C:\Users\shaun\Documents\Claude\Mapzeroth\Mapzeroth\PlayerAbilities.lua")
+SRC = ROOT.parent / "Mapzeroth" / "PlayerAbilities.lua"
 OUT = ROOT / "Data" / "Modern" / "Abilities.lua"
 NOTES = ROOT / "Data" / "Modern" / "CONVERSION_NOTES.md"
 

@@ -38,7 +38,7 @@ import modern_ids
 import conversion_notes
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-SRC = pathlib.Path(r"C:\Users\shaun\Documents\Claude\Mapzeroth\Mapzeroth\Data\Mapzeroth_Data_Edges.lua")
+SRC = ROOT.parent / "Mapzeroth" / "Data" / "Mapzeroth_Data_Edges.lua"
 OUT = ROOT / "Data" / "Modern"
 
 # The old Constants.lua's TRAVEL_COSTS: what an omitted `cost` meant, by method. `walk` is

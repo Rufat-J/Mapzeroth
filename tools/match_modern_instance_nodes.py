@@ -18,7 +18,7 @@ import re
 from lupa.lua51 import LuaRuntime
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-SRC = pathlib.Path(r"C:\Users\shaun\Documents\Claude\Mapzeroth\Mapzeroth\Data")
+SRC = ROOT.parent / "Mapzeroth" / "Data"
 JOURNAL_CSV = ROOT / "tools" / "modern_source" / "journal_instance_retail.csv"
 OUT = ROOT / "tools" / "modern_source" / "instance_node_matches.tsv"
 

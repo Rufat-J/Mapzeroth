@@ -33,7 +33,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 CAPTURES = ROOT / "tools" / "modern_source" / "taxi_captures"
 CAPTURE_RADIUS = 0.06       # map units: the old data's positions are rough (Everlook is 0.045 off)
 FACTION_BITS = {"ALLIANCE": 1, "HORDE": 2}
-SRC = pathlib.Path(r"C:\Users\shaun\Documents\Claude\Mapzeroth\Mapzeroth\Data")
+SRC = ROOT.parent / "Mapzeroth" / "Data"
 TAXI_CSV = ROOT / "tools" / "modern_source" / "taxi_nodes_retail.csv"
 OUT = ROOT / "tools" / "modern_source" / "flight_node_matches.tsv"
 

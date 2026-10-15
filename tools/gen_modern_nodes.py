@@ -59,7 +59,7 @@ import modern_ids
 import conversion_notes
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-SRC = pathlib.Path(r"C:\Users\shaun\Documents\Claude\Mapzeroth\Mapzeroth\Data")
+SRC = ROOT.parent / "Mapzeroth" / "Data"
 OUT = ROOT / "Data" / "Modern"
 
 # Old file stem -> (output key for addon.Nodes.<key>, output filename).
