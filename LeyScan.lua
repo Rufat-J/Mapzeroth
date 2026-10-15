@@ -20,13 +20,13 @@ local MOVE_YARDS = 30          -- scan after moving this far
 local IDLE_SECONDS = 60        -- or after this long standing still: a node can come up next to you
 local COARSE_STEP = 8          -- minimap units between coarse points; a blip is wider than this
 local FINE_STEP = 2
-local FINE_REACH = 8           -- the fine grid spans this far each way from a coarse hit
 local PER_FRAME = 60           -- coarse points per frame, so the scan doesn't stutter
+local FINE_PER_FRAME = 150     -- fine points per frame
 local HOVER_SECONDS = 0.1      -- controller / no scan APIs: how often to look at the pointer
 local MAX_SAMPLE_YARDS = 60    -- a hover reading spread wider than this (moved, tooltip lingered) is dropped
 
 local frame                    -- runs a scan in progress, a frame at a time (made by Start)
-local scan                     -- the scan in progress: { mapID, points, i, hits, h }
+local scan                     -- the scan in progress: { mapID, points, i, hits, blips, b, report }
 local last                     -- where and when the last scan ran: { mapID, x, y, zoom, at }
 local sample                   -- pointer watching: the box of zone positions while a node's tooltip stays up
 
@@ -64,14 +64,21 @@ end
 local function nodeAt(lx, ly)
     local s = Minimap:GetEffectiveScale()
     Minimap:UpdateMouseoverAtPoint((Minimap:GetLeft() + lx) * s, (Minimap:GetBottom() + ly) * s)
-    return hasNode(C_TooltipInfo.GetMinimapMouseover())
+    local data = C_TooltipInfo.GetMinimapMouseover()
+    if scan and scan.texts then                         -- a dev report (ScanNow): every tooltip line the scan saw
+        for _, line in ipairs(data and data.lines or {}) do
+            if type(line.leftText) == "string" then scan.texts[strip(line.leftText)] = true end
+        end
+    end
+    return hasNode(data)
 end
 
 -- Runs fn with the soft cursor on, and always turns it back off.
 local function withSoftCursor(fn)
     Minimap:SetUsingSoftCursor(true)
-    local ok = pcall(fn)
+    local ok, err = pcall(fn)
     Minimap:SetUsingSoftCursor(false)
+    if not ok and scan then scan.err = err end
     return ok
 end
 
@@ -98,9 +105,11 @@ function LeyScan:ToZone(lx, ly)
     if x >= 0 and x <= 1 and y >= 0 and y <= 1 then return mapID, x, y end
 end
 
--- A controller is in use: it owns the minimap's soft cursor, so we must not switch it on and off.
+-- A controller is in use: it owns the minimap's soft cursor, so we must not switch it on and off. Not the GamePadEnable
+-- CVar: it can be on for players who have never touched a controller (it blocked SLLCM's scan for one).
 local function controller()
-    return GetCVarBool("GamePadEnable") or (InputUtil and InputUtil.IsGamepadUIEnabled and InputUtil.IsGamepadUIEnabled())
+    return (InputUtil and InputUtil.IsGamepadUIEnabled and InputUtil.IsGamepadUIEnabled())
+        or (SoftCursor and SoftCursor:IsShown()) or false
 end
 
 -- Scan, or (a controller, or a client without the APIs) watch the pointer instead.
@@ -108,68 +117,101 @@ local function scanning()
     return supported() and not controller()
 end
 
-local function stop()
+-- why: set when a scan is cut short, for a dev report.
+local function stop(why)
+    local s = scan
     scan = nil
     if frame then frame:Hide() end
+    if not (s and s.report) then return end
+    local texts = {}
+    for t in pairs(s.texts) do texts[#texts + 1] = t end
+    table.sort(texts)
+    s.report({ why = why or "finished", done = math.min(s.i - 1, #s.points), points = #s.points, hits = #s.hits,
+               blips = #s.blips, err = s.err, texts = texts, found = s.found })
 end
 
 local function blocked()
     return InCombatLockdown() or not Minimap:IsVisible() or Minimap:IsMouseOver()
 end
 
+-- Touching coarse hits (diagonals too) are one blip: its tooltip area is wider than the coarse step, by how much
+-- depends on the minimap's size and scale (20+ units on a large square minimap in game, where fine-scanning around
+-- each hit apart turned one node next to the player into four, ~10 yd off at the corners). Each blip gets a fine grid
+-- over its hits' box, widened by a coarse step each way (the area ends somewhere before the next coarse point out).
+local function groupBlips(hits)
+    local at, blips, seen = {}, {}, {}
+    for _, h in ipairs(hits) do at[h.i .. ":" .. h.j] = h end
+    for _, h in ipairs(hits) do
+        if not seen[h] then
+            local x0, x1, y0, y1 = h[1], h[1], h[2], h[2]
+            local stack = { h }
+            seen[h] = true
+            while #stack > 0 do
+                local c = table.remove(stack)
+                x0, x1, y0, y1 = math.min(x0, c[1]), math.max(x1, c[1]), math.min(y0, c[2]), math.max(y1, c[2])
+                for di = -1, 1 do
+                    for dj = -1, 1 do
+                        local nb = at[(c.i + di) .. ":" .. (c.j + dj)]
+                        if nb and not seen[nb] then
+                            seen[nb] = true
+                            stack[#stack + 1] = nb
+                        end
+                    end
+                end
+            end
+            local points = {}
+            for x = x0 - COARSE_STEP, x1 + COARSE_STEP, FINE_STEP do
+                for y = y0 - COARSE_STEP, y1 + COARSE_STEP, FINE_STEP do points[#points + 1] = { x, y } end
+            end
+            blips[#blips + 1] = { points = points, i = 1, sx = 0, sy = 0, n = 0 }
+        end
+    end
+    return blips
+end
+
 -- One frame of a scan in progress.
 function LeyScan:Update()
     if not scan then return stop() end
     -- The player's own mouse on the minimap wins; a zone change makes the hits meaningless.
-    if blocked() or not enabled() or C_Map.GetBestMapForUnit("player") ~= scan.mapID then return stop() end
+    if blocked() or not enabled() then return stop("stopped (combat, minimap hidden or mouse on it)") end
+    if C_Map.GetBestMapForUnit("player") ~= scan.mapID then return stop("stopped (zone changed)") end
 
     if scan.i <= #scan.points then
-        -- Coarse pass: remember hits, one per blip.
+        -- Coarse pass: every hit, with its grid indexes.
         local ok = withSoftCursor(function()
             for i = scan.i, math.min(scan.i + PER_FRAME - 1, #scan.points) do
                 local p = scan.points[i]
-                if nodeAt(p[1], p[2]) then
-                    local known = false
-                    for _, hit in ipairs(scan.hits) do
-                        if math.abs(hit[1] - p[1]) <= FINE_REACH and math.abs(hit[2] - p[2]) <= FINE_REACH then
-                            known = true
-                            break
-                        end
-                    end
-                    if not known then scan.hits[#scan.hits + 1] = { p[1], p[2] } end
-                end
+                if nodeAt(p[1], p[2]) then scan.hits[#scan.hits + 1] = p end
             end
         end)
-        if not ok then return stop() end
+        if not ok then return stop("failed") end
         scan.i = scan.i + PER_FRAME
+        if scan.i > #scan.points then scan.blips = groupBlips(scan.hits) end
         return
     end
 
-    -- Fine pass, one blip a frame: the centre of the points that show its tooltip. Run twice, the second centred on
-    -- the first result: a coarse hit near the blip's edge clips the first grid.
-    local hit = scan.hits[scan.h]
-    if not hit then return stop() end
-    local sx, sy, n = 0, 0, 0
+    -- Fine pass: a blip's centre is the centre of the points that show its tooltip.
+    local blip = scan.blips[scan.b]
+    if not blip then return stop() end
     local ok = withSoftCursor(function()
-        for ox = -FINE_REACH, FINE_REACH, FINE_STEP do
-            for oy = -FINE_REACH, FINE_REACH, FINE_STEP do
-                if nodeAt(hit[1] + ox, hit[2] + oy) then sx, sy, n = sx + hit[1] + ox, sy + hit[2] + oy, n + 1 end
-            end
+        for i = blip.i, math.min(blip.i + FINE_PER_FRAME - 1, #blip.points) do
+            local p = blip.points[i]
+            if nodeAt(p[1], p[2]) then blip.sx, blip.sy, blip.n = blip.sx + p[1], blip.sy + p[2], blip.n + 1 end
         end
     end)
-    if not ok then return stop() end
-    if n > 0 and not hit.refined then
-        hit[1], hit[2], hit.refined = sx / n, sy / n, true
-        return
-    end
-    scan.h = scan.h + 1
-    if n > 0 then
-        local mapID, x, y = self:ToZone(sx / n, sy / n)
-        if mapID then addon.LeyShare:OnMinimapNode(mapID, x, y) end
-    end
+    if not ok then return stop("failed") end
+    blip.i = blip.i + FINE_PER_FRAME
+    if blip.i <= #blip.points then return end
+    scan.b = scan.b + 1
+    if blip.n == 0 then return end
+    local lx, ly = blip.sx / blip.n, blip.sy / blip.n
+    local mapID, x, y = self:ToZone(lx, ly)
+    if scan.found then scan.found[#scan.found + 1] = { lx = lx, ly = ly, n = blip.n, mapID = mapID, x = x, y = y } end
+    if mapID then addon.LeyShare:OnMinimapNode(mapID, x, y) end
 end
 
--- Coarse grid centred on the minimap, clipped to its round shape unless an addon made it square.
+-- Coarse grid centred on the minimap, clipped to its round shape unless an addon made it square. i, j are grid indexes,
+-- so groupBlips can find neighbours.
 local function coarsePoints()
     local w, h = Minimap:GetSize()
     local cx, cy, r = w / 2, h / 2, math.min(w, h) / 2
@@ -178,7 +220,7 @@ local function coarsePoints()
     for i = -n, n do
         for j = -n, n do
             local ox, oy = i * COARSE_STEP, j * COARSE_STEP
-            if square or ox * ox + oy * oy <= r * r then points[#points + 1] = { cx + ox, cy + oy } end
+            if square or ox * ox + oy * oy <= r * r then points[#points + 1] = { cx + ox, cy + oy, i = i, j = j } end
         end
     end
     return points
@@ -198,8 +240,40 @@ function LeyScan:Check()
         return
     end
     last = { mapID = mapID, x = x, y = y, zoom = zoom, at = now }
-    scan = { mapID = mapID, points = coarsePoints(), i = 1, hits = {}, h = 1 }
+    scan = { mapID = mapID, points = coarsePoints(), i = 1, hits = {}, blips = {}, b = 1 }
     frame:Show()
+end
+
+-- For the dev tools (/mzr scan): what decides whether a scan runs, and the minimap's shape and scale.
+function LeyScan:Diagnose()
+    local w, h = Minimap:GetSize()
+    return {
+        apis = {
+            SetUsingSoftCursor = Minimap.SetUsingSoftCursor ~= nil, UpdateMouseoverAtPoint = Minimap.UpdateMouseoverAtPoint ~= nil,
+            GetMinimapMouseover = (C_TooltipInfo and C_TooltipInfo.GetMinimapMouseover) ~= nil,
+            GetViewRadius = (C_Minimap and C_Minimap.GetViewRadius) ~= nil,
+        },
+        setting = addon.Options:Get("detectMinimapNodes"), networking = addon.LeyShare:Networking(),
+        gamepadUI = (InputUtil and InputUtil.IsGamepadUIEnabled and InputUtil.IsGamepadUIEnabled()) and true or false,
+        softCursor = (SoftCursor and SoftCursor:IsShown()) and true or false,
+        combat = InCombatLockdown() and true or false, instance = IsInInstance() and true or false,
+        mouseOn = Minimap:IsMouseOver() and true or false, scanning = scanning() and true or false,
+        width = w, height = h, left = Minimap:GetLeft(), bottom = Minimap:GetBottom(), scale = Minimap:GetEffectiveScale(),
+        shape = GetMinimapShape and GetMinimapShape() or nil, viewRadius = C_Minimap and C_Minimap.GetViewRadius and C_Minimap.GetViewRadius(),
+        zoom = Minimap:GetZoom(), rotate = GetCVar("rotateMinimap") == "1",
+    }
+end
+
+-- For the dev tools: one scan now, whatever the last one was. report(result) is called when it ends, with how far it
+-- got, every tooltip line it saw and each blip found ({ lx, ly, n, mapID, x, y }). Returns nil, or why it didn't start.
+function LeyScan:ScanNow(report)
+    if not scanning() then return supported() and "controller mode (pointer watching instead)" or "APIs missing" end
+    if scan then return "one already running" end
+    if not frame then return "not started (before login?)" end
+    last = nil
+    self:Check()
+    if not scan then return "didn't start (setting off, not sharing, combat, instance, or mouse on the minimap)" end
+    scan.report, scan.texts, scan.found = report, {}, {}
 end
 
 ---------------------------------------------------------------------------

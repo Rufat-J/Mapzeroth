@@ -11,10 +11,11 @@ local LS, Scan = addon.LeyShare, addon.LeyScan
 local ZONE_W, ZONE_H = 3000, 2000              -- yards
 local VIEW_RADIUS = 233                        -- yards from the minimap's centre to its edge
 local MM_SIZE, MM_LEFT, MM_BOTTOM, MM_SCALE = 140, 1000, 500, 0.8
-local BLIP_HALF = 6                            -- a blip's hit box half-width, minimap units
+local BLIP_SIZES = { 6, 12 }                   -- a blip's tooltip area half-widths to try, minimap units (10+ in game)
+local blipHalf = 6
 local YPP = VIEW_RADIUS / (MM_SIZE / 2)        -- yards per minimap unit
 local TOLERANCE = math.sqrt(2) * YPP           -- a scan: the 2-unit fine grid is off by up to 1 unit per axis
-local HOVER_TOLERANCE = BLIP_HALF * YPP        -- a resting cursor is anywhere on the blip
+local HOVER_TOLERANCE = 12 * YPP               -- a resting cursor is anywhere on the blip
 local MAP = 1417
 
 -- A Skyborne Alliance character sharing, on a client with the channel joined as /5.
@@ -57,7 +58,8 @@ C_Map = {
 }
 C_Minimap = { GetViewRadius = function() return VIEW_RADIUS end }
 function GetCVar(k) return (k == "rotateMinimap" and rotate) and "1" or "0" end
-function GetCVarBool(k) return controller and k == "GamePadEnable" end
+function GetCVarBool(k) return k == "GamePadEnable" end     -- on for keyboard players too: must not matter
+InputUtil = { IsGamepadUIEnabled = function() return controller end }
 function GetPlayerFacing() return facing end
 function InCombatLockdown() return combat end
 function IsInInstance() return instance end
@@ -82,7 +84,7 @@ local function tooltipAt(pt)
     local lines = {}
     if pt then
         for _, b in ipairs(blips) do
-            if math.abs(pt[1] - b[1]) <= BLIP_HALF and math.abs(pt[2] - b[2]) <= BLIP_HALF then
+            if math.abs(pt[1] - b[1]) <= blipHalf and math.abs(pt[2] - b[2]) <= blipHalf then
                 lines[#lines + 1] = { leftText = "|cffffffffLey Line|r" }
             end
         end
@@ -135,7 +137,7 @@ end
 local function runScan(nodes)
     setup(nodes)
     tickers[2]()                                 -- Check starts a scan
-    for _ = 1, 100 do
+    for _ = 1, 500 do
         if not frame.shown then break end
         frame.OnUpdate(frame)
     end
@@ -163,16 +165,25 @@ record()
 local nodes = { { 0.5 + 120 / ZONE_W, 0.5 - 80 / ZONE_H }, { 0.5 - 60 / ZONE_W, 0.5 + 150 / ZONE_H },
                 { 0.5 - 190 / ZONE_W, 0.5 + 10 / ZONE_H } }
 
-facing, rotate = 1.0, false
-local ok, detail = lands(nodes, runScan(nodes))
-check(ok, "rotation off: " .. detail)
-
-rotate = true
-for _, deg in ipairs({ 0, 45, 90, 135, 180, 230, 300 }) do
-    facing = math.rad(deg)
+local ok, detail
+for _, half in ipairs(BLIP_SIZES) do
+    blipHalf = half
+    facing, rotate = 1.0, false
     ok, detail = lands(nodes, runScan(nodes))
-    check(ok, ("rotating, facing %d deg: %s"):format(deg, detail))
+    check(ok, ("blip %d: rotation off: %s"):format(half, detail))
+    rotate = true
+    for _, deg in ipairs({ 0, 45, 90, 135, 180, 230, 300 }) do
+        facing = math.rad(deg)
+        ok, detail = lands(nodes, runScan(nodes))
+        check(ok, ("blip %d: rotating, facing %d deg: %s"):format(half, deg, detail))
+    end
 end
+
+-- Standing on a node with a wide tooltip area: one blip, not one per coarse hit (it split into four in SLLCM in game).
+blipHalf, rotate, facing = 12, false, 0
+ok, detail = lands({ player }, runScan({ player }))
+check(ok, "standing on a node: " .. detail)
+blipHalf, rotate = 6, true
 
 -- The test can tell a wrong rotation apart: drawn rotated the other way, the scan must miss.
 facing, wrongWay = math.rad(70), true
@@ -203,7 +214,7 @@ combat = false
 setup(nodes)
 tickers[2]()
 check(frame.shown, "a scan starts")
-for _ = 1, 100 do if frame.shown then frame.OnUpdate(frame) end end
+for _ = 1, 500 do if frame.shown then frame.OnUpdate(frame) end end
 tickers[2]()
 check(not frame.shown, "standing still, not straight away")
 player = { 0.5 + 20 / ZONE_W, 0.5 }
@@ -212,7 +223,7 @@ check(not frame.shown, "nor after 20 yards")
 player = { 0.5 + 35 / ZONE_W, 0.5 }
 tickers[2]()
 check(frame.shown, "but after 35")
-for _ = 1, 100 do if frame.shown then frame.OnUpdate(frame) end end
+for _ = 1, 500 do if frame.shown then frame.OnUpdate(frame) end end
 clock = clock + 61
 tickers[2]()
 check(frame.shown, "or after a minute")
@@ -262,6 +273,18 @@ for _, deg in ipairs({ 0, 160 }) do
     check(ok, ("controller cursor, facing %d deg: %s"):format(deg, detail))
 end
 controller, pointer, SoftCursor = false, nil, nil
+
+-- The dev report (/mzr scan): one scan now, whatever the last was, reporting what it saw.
+setup(nodes)
+local report
+check(Scan:ScanNow(function(r) report = r end) == nil, "ScanNow starts a scan")
+check(Scan:ScanNow(function() end) == "one already running", "but not a second")
+for _ = 1, 500 do if frame.shown then frame.OnUpdate(frame) end end
+check(report and report.why == "finished" and report.blips == 3 and #report.found == 3, "it reports three blips")
+local sawVein = false
+for _, t in ipairs(report.texts) do if t == "Copper Vein" then sawVein = true end end
+check(sawVein, "and the other tooltip text it passed")
+check(Scan:Diagnose().scanning, "Diagnose: scanning with GamePadEnable on and no gamepad UI")
 
 ---------------------------------------------------------------------------
 -- Sharing a blip: like a racial's sighting, unless this phase has one of that node from the last 10 minutes.
