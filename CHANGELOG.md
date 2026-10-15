@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.1
+
+### Added
+- **Detect nodes on the minimap** (Skyborne, while sharing sightings). Mapzeroth finds ley line and elemental convergence dots on your minimap without you pointing at them, and shares them like a sighting from your racial. It works with a rotating or square minimap, and never runs in combat, in instances, or while your mouse is on the minimap. On by default; turn it off on the settings page. If you use Skyborne Ley Line & Convergence Marker, it does this instead.
+- **More ley lines and convergences:** 12 more of each, 76 ley lines and 56 convergences in all.
+
+### Changed
+- "How it works" now sits under the sharing setting's title, since it covers both sharing settings.
+
+### Fixed
+- Ley line sharing could take chat channel /1 when it joined before the game's channels, pushing General and Trade to /2 and /3. General, Trade and your own chat channels now keep their numbers.
+
 ## 0.8.0
 
 ### Added
