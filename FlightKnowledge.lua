@@ -221,12 +221,17 @@ local function taxiMapID()
     return addon:GetContinentMapID(C_Map.GetBestMapForUnit("player"))
 end
 
+-- Every flight point of the open flight window, as the client lists them ({ nodeID, slotIndex, state, ... }), or nil.
+function FlightKnowledge:WindowNodes()
+    local mapID = taxiMapID()
+    return mapID and C_TaxiMap and C_TaxiMap.GetAllTaxiNodes and C_TaxiMap.GetAllTaxiNodes(mapID) or nil
+end
+
 -- The flight points a chosen flight lands at, in order, the last being where it ends, as node ids: the
 -- game's own route for the slot the player clicked (the same GetNumRoutes / TaxiGetNodeSlot reading as
 -- /mzroutes). Nil when it can't be read.
 function FlightKnowledge:StopsForSlot(slot)
-    local mapID = taxiMapID()
-    local nodes = mapID and C_TaxiMap and C_TaxiMap.GetAllTaxiNodes and C_TaxiMap.GetAllTaxiNodes(mapID)
+    local nodes = self:WindowNodes()
     if not (nodes and slot) then return nil end
     local bySlot = {}
     for _, node in ipairs(nodes) do
@@ -248,8 +253,7 @@ end
 
 -- Call when the flight map opens.
 function FlightKnowledge:OnTaxiMapOpened(ctx)
-    local mapID = taxiMapID()
-    local nodes = mapID and C_TaxiMap and C_TaxiMap.GetAllTaxiNodes and C_TaxiMap.GetAllTaxiNodes(mapID)
+    local nodes = self:WindowNodes()
     if not nodes then return end
     local entries = {}
     for _, node in ipairs(nodes) do

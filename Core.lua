@@ -22,6 +22,7 @@ frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("HEARTHSTONE_BOUND")
 frame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
 frame:RegisterEvent("TAXIMAP_OPENED")
+frame:RegisterEvent("TAXIMAP_CLOSED")
 frame:RegisterEvent("FACTION_STANDING_CHANGED")
 frame:RegisterEvent("SPELLS_CHANGED")
 frame:RegisterEvent("UI_INFO_MESSAGE")
@@ -34,6 +35,10 @@ frame:SetScript("OnEvent", function(_, event, ...)
         return
     elseif event == "TAXIMAP_OPENED" then
         addon.FlightKnowledge:OnTaxiMapOpened()
+        addon.TaxiMark:OnOpened()
+        return
+    elseif event == "TAXIMAP_CLOSED" then
+        addon.TaxiMark:Hide()
         return
     elseif event == "FACTION_STANDING_CHANGED" then
         -- A standing tier crossing can change vendor/flight discounts; see FlightKnowledge's

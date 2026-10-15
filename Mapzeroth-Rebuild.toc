@@ -104,6 +104,7 @@ UI\Themes\Classic.lua
 UI\Themes\ModernDark.lua
 UI\Themes\Cartographer.lua
 UI\RouteLines.lua
+UI\TaxiMark.lua
 UI\MinimapLines.lua
 UI\LinkPopup.lua
 UI\Panel.lua

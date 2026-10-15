@@ -408,6 +408,27 @@ function Navigation:OnTakeTaxi(stops, now)
     active.ticket = { stops = stops, at = now or 0 }
 end
 
+-- Where the trip flies to from a flight master (a node id, "TAXI_<id>"), for marking it on the flight map: the last
+-- landing of the flights that leave fromID one after another (the game sells those as one ticket). Nil when the trip
+-- has no flight from there still to come on this leg.
+function Navigation:FlightTarget(fromID)
+    if not active or active.finished or active.offRoute or not fromID then return nil end
+    local last = lookAheadEnd()
+    for i = active.index, last do
+        local step = active.steps[i]
+        if kindOf(step.method) == "flight" and step.fromID == fromID then
+            local target = step.nodeID
+            for k = i + 1, last do
+                local after = active.steps[k]
+                if kindOf(after.method) ~= "flight" or after.fromID ~= target then break end
+                target = after.nodeID
+            end
+            return target
+        end
+    end
+    return nil
+end
+
 -- The flight has begun. If it ends where a step of the route ends, that is the step being flown (the
 -- ones before it, if any, were flown through, or are skipped); otherwise it is the wrong place, and the
 -- route is worked out again on landing.

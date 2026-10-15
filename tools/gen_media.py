@@ -130,6 +130,7 @@ MARKERS = {   # name: (design size, shape)
     "Stop": (11, rounded_square(5.5, 5.5, 4.0, 1.6)),
     "Dest": (15, union(ring(7.5, 7.5, 5.0, 1.25), lambda x, y: math.hypot(x - 7.5, y - 7.5) - 1.9)),
 }
+HALO = ring(20, 20, 15, 2.2)       # 128 x 128 over 40 x 40 design px
 
 # --- The navigator's arrow (256 x 256 over 72 x 72 design px), two-tone, its dark edge baked in ------------------
 CHEVRON = [(36, 8), (61, 61), (36, 48), (11, 61)]
@@ -161,6 +162,10 @@ def main():
     for name, (size, shape) in MARKERS.items():
         render(name + ".tga", 64, 64, size, size, [(shape, 1.0)], aa=0.8)
         render(name + "Edge.tga", 64, 64, size, size, [(lambda x, y, f=shape: f(x, y) - 1.2, 1.0)], aa=0.8)
+    # The ring round the flight point a route flies to, on the flight master's map (Theme:TaxiMark): drawn larger than
+    # the route's markers, since it sits round the game's own node button.
+    render("Halo.tga", 128, 128, 40, 40, [(HALO, 1.0)], aa=0.8)
+    render("HaloEdge.tga", 128, 128, 40, 40, [(lambda x, y: HALO(x, y) - 1.2, 1.0)], aa=0.8)
     edge = lambda x, y: poly_sdf(x, y, CHEVRON) - 3
     render("Arrow.tga", 256, 256, 72, 72, [
         (edge, 0.06),

@@ -373,3 +373,22 @@ do
     N:Stop()
     check(N:ReplanTarget() == nil, "and with no trip there is nothing to plan")
 end
+
+-- The flight to mark on the flight master's map: the end of the flights that leave this flight master one after
+-- another (one ticket), and none from a flight master the route doesn't fly from.
+do
+    N:Start(entry, { steps = {
+        step("walk", "YOU", "TAXI_2", 60),
+        step("taxi", "TAXI_2", "TAXI_6", 200),
+        step("taxi", "TAXI_6", "TAXI_7", 150),
+        step("walk", "TAXI_7", "TAXI_8", 90),
+        step("taxi", "TAXI_8", "TAXI_9", 120),
+    } })
+    check(N:FlightTarget("TAXI_2") == "TAXI_7", "from Stormwind: through Ironforge to the end of the run of flights")
+    check(N:FlightTarget("TAXI_6") == "TAXI_7", "from the middle of the run: its end")
+    check(N:FlightTarget("TAXI_8") == "TAXI_9", "a later flight, after a walk, is its own ticket")
+    check(N:FlightTarget("TAXI_4") == nil, "no flight from a flight master the route doesn't fly from")
+    check(N:FlightTarget(nil) == nil, "and none when where the player is isn't known")
+    N:Stop()
+    check(N:FlightTarget("TAXI_2") == nil, "no trip, nothing to mark")
+end

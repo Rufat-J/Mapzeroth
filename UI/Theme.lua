@@ -270,6 +270,11 @@ skin.text = function(fs, opts)
     setShadow(fs, current.noShadow or (style == "primary" and current.button ~= "blizzard"))
 end
 
+skin.taximark = function(mark)
+    mark.ring:SetVertexColor(Theme:MapColor("dest"))
+    mark.edge:SetVertexColor(Theme:MapColor("casing"))
+end
+
 -- A tour stop's number in a disc of the primary button's colours.
 skin.badge = function(badge)
     badge.disc:SetVertexColor(Theme:Color("primaryBg"))
@@ -637,6 +642,31 @@ function Theme:Arrow(parent, size)
     local arrow = parent:CreateTexture(nil, "ARTWORK")
     arrow:SetSize(size, size)
     return register(arrow, "arrow")
+end
+
+-- The ring round the flight point a route flies to, on the flight master's map: a slow pulse, in the route's end
+-- colour over the casing (our own picture, tools/gen_media.py). Takes no clicks; the game's button under it does.
+function Theme:TaxiMark(parent)
+    local mark = CreateFrame("Frame", nil, parent)
+    mark:EnableMouse(false)
+    mark.edge = mark:CreateTexture(nil, "ARTWORK", nil, 1)
+    mark.edge:SetAllPoints()
+    mark.edge:SetTexture("Interface\\AddOns\\" .. addonName .. "\\Media\\HaloEdge", "CLAMP", "CLAMP", "TRILINEAR")
+    mark.ring = mark:CreateTexture(nil, "ARTWORK", nil, 2)
+    mark.ring:SetAllPoints()
+    mark.ring:SetTexture("Interface\\AddOns\\" .. addonName .. "\\Media\\Halo", "CLAMP", "CLAMP", "TRILINEAR")
+    local pulse = mark:CreateAnimationGroup()
+    pulse:SetLooping("BOUNCE")
+    local fade = pulse:CreateAnimation("Alpha")
+    fade:SetFromAlpha(1)
+    fade:SetToAlpha(0.35)
+    fade:SetDuration(0.8)
+    fade:SetSmoothing("IN_OUT")
+    mark.pulse = pulse
+    mark:SetScript("OnShow", function(self) self.pulse:Play() end)
+    mark:SetScript("OnHide", function(self) self.pulse:Stop() end)
+    mark:Hide()          -- a new frame starts shown, and its first Show would then never start the pulse
+    return register(mark, "taximark")
 end
 
 -- A number in a disc (a tour stop's): badge:SetNumber(n).

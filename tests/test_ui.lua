@@ -38,6 +38,13 @@ local function mock(isFontString)
             GetFrameLevel = function() return 5 end,
             CreateFontString = function() return mock(true) end,
             CreateTexture = function() return mock() end,
+            CreateAnimationGroup = function() return mock() end,
+            CreateAnimation = function() return mock() end,
+            SetPoint = function(self, point, rel) self._anchor = rel end,
+            SetParent = function(self, p) self._parent = p end,
+            GetParent = function(self) return self._parent end,
+            GetSize = function(self) return self._w or 16, self._h or 16 end,
+            SetSize = function(self, w, h) self._w, self._h = w, h end,
             -- The client wants an asset here (nil is an error), and has a texture only once set.
             SetNormalTexture = function(self, a) if a == nil then error("Usage: self:SetNormalTexture(asset)", 2) end self._normal = mock() end,
             SetPushedTexture = function(self, a) if a == nil then error("Usage: self:SetPushedTexture(asset)", 2) end self._pushed = mock() end,
@@ -1303,4 +1310,67 @@ do
     addon.Panel:DeleteEditor()
     check(#MapzerothRebuildDB.routes == 0 and state.view == "list" and not sectionRow("routes"), "the second deletes it, and Routes goes")
     MapzerothRebuildDB.routes, MapzerothRebuildDB.routesSeeded, MapzerothRebuildDB.nextRouteID = nil, nil, nil
+end
+
+-- The flight master's map: a ring round the route's next flight point, on the game's own node button (classic) or pin
+-- (retail), placed a moment after the window opens and gone when it closes.
+do
+    local TM, Nav, FK = addon.TaxiMark, addon.Navigation, addon.FlightKnowledge
+    local timers = {}
+    C_Timer = { After = function(_, fn) timers[#timers + 1] = fn end }
+    local function runTimers()
+        local due = timers
+        timers = {}
+        for _, fn in ipairs(due) do fn() end
+    end
+    local windowNodes = FK.WindowNodes
+    local nodes = { { nodeID = 2, state = 0, slotIndex = 1 }, { nodeID = 6, state = 1, slotIndex = 3 } }
+    FK.WindowNodes = function() return nodes end
+    local routeMap = mock()
+    TaxiButton3 = mock()
+    TaxiButton3._parent = routeMap
+
+    TM:OnOpened()
+    check(#timers == 0, "no trip: nothing to mark")
+
+    Nav:Start({ name = "Ironforge" }, { steps = {
+        { method = "walk", fromID = "YOU", nodeID = "TAXI_2", seconds = 60 },
+        { method = "taxi", fromID = "TAXI_2", nodeID = "TAXI_6", seconds = 200 },
+    } })
+    TM:OnOpened()
+    runTimers()
+    local mark = TM.Mark()
+    check(mark and mark:IsShown() and mark._anchor == TaxiButton3 and mark._parent == routeMap,
+        "the ring sits on Ironforge's button, in the window's route map")
+    check(mark._w >= 26 and mark._w <= 52, "and is sized round the button: " .. tostring(mark._w))
+    TM:Hide()
+    check(not mark:IsShown(), "closing the window takes it away")
+
+    TM:OnOpened()
+    TM:Hide()
+    runTimers()
+    check(not mark:IsShown(), "a window closed before the ring was placed stays without one")
+
+    nodes[2].state = 2
+    TM:OnOpened()
+    check(#timers == 0, "a flight point that can't be flown to from here isn't marked")
+    nodes[2].state = 1
+
+    -- Retail's flight map: the ring goes on the node's pin.
+    local pin = mock()
+    pin.taxiNodeData = { nodeID = 6, slotIndex = 3 }
+    pin._parent = mock()
+    FlightMapFrame = mock()
+    FlightMapFrame.EnumeratePinsByTemplate = function()
+        local done = false
+        return function() if not done then done = true return pin end end
+    end
+    TM:OnOpened()
+    runTimers()
+    check(mark:IsShown() and mark._anchor == pin and mark._parent == pin._parent, "on the retail map it sits on the pin")
+    TM:Hide()
+
+    FlightMapFrame, TaxiButton3, C_Timer = nil, nil, nil
+    FK.WindowNodes = windowNodes
+    Nav:Stop()
 end
