@@ -470,7 +470,7 @@ function Journey:Plan(session, goalID, banned, backBanned)
     return plan
 end
 
--- A "nearest ley line / convergence" pick's nodes that were seen up in the player's phase in the last hour (other
+-- A "nearest ley line / convergence" pick's nodes that were seen up in the player's phase in the last 90 minutes (other
 -- players' sightings and their own, LeyShare.lua): { nodeIDs, ages by node id }, or nil when none were.
 local function sighted(entry)
     if not leyPick(entry) then return nil end
@@ -486,7 +486,8 @@ end
 
 -- `yield` (optional): called between searches, so a long plan (a tour, MultiRoute.lua) can be spread over several
 -- frames (MultiRoute:Run); a plan to one place ignores it. A ley line or convergence pick goes to the nearest one seen
--- up in the player's phase when it can be reached (plan.seenAge: seconds since), else the nearest of them all.
+-- up in the player's phase when it can be reached (plan.seenAge: seconds since), else the nearest not reported "not
+-- there" there, else the nearest of them all.
 function Journey:PlanEntry(session, entry, yield)
     if entry.stops then return addon.MultiRoute:Plan(session, entry, yield) end
     local seen, ages = sighted(entry)
@@ -497,7 +498,18 @@ function Journey:PlanEntry(session, entry, yield)
             return plan
         end
     end
-    return self:Plan(session, goalsOf(entry), entry.banned, entry.backBanned)       -- the plan, or nil and a hint about a missing flight
+    -- Then the nearest not reported "not there" in the player's phase (Skyborne Compass's XM / XS, LeyShare.lua).
+    local goals = goalsOf(entry)
+    local gone = leyPick(entry) and addon.LeyShare:GoneAmong(goals)
+    if gone then
+        local open = {}
+        for _, id in ipairs(goals) do
+            if not gone[id] then open[#open + 1] = id end
+        end
+        local plan = #open > 0 and self:Plan(session, open, entry.banned, entry.backBanned)
+        if plan then return plan end
+    end
+    return self:Plan(session, goals, entry.banned, entry.backBanned)       -- the plan, or nil and a hint about a missing flight
 end
 
 -- A round trip to an entry: to whichever of its places has the quickest way there and back to where the player stands,

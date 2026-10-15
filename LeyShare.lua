@@ -2,7 +2,7 @@ local addonName, addon = ...
 
 -- Ley line and elemental convergence sightings, shared with Skyborne Ley Line & Convergence Marker (SLLCM, the
 -- player's other addon) on its hidden channel. When a Skyborne character's racial confirms a node, where it is and
--- the phase (shard) the player is in go out to everyone on the channel; what others send is kept for an hour, and
+-- the phase (shard) the player is in go out to everyone on the channel; what others send is kept for 90 minutes, and
 -- the "Nearest Ley Line" / "Nearest Elemental Convergence" picks go to a node seen in the player's phase when there
 -- is one (Journey:PlanEntry asks SeenAmong).
 --
@@ -10,7 +10,10 @@ local addonName, addon = ...
 --   R:1:fac:phase:mapID:x:y:t          one sighting (x, y = map position x 10000, 0-9999; t = GetServerTime())
 --   Q:1:fac:phase                      "what do you have for this phase?"
 --   S:1:fac:phase:mapID,x,y,t;...      reply to Q, at most MAX_PER_REPLY entries a message
--- fac is A or H; phase is the zoneUID of creature GUIDs (digits).
+--   XM:1:fac:phase:mapID:x:y:t         "not there": a known node was in someone's minimap range with no blip, at t
+--   XS:1:fac:phase:mapID,x,y,t;...     the "not there"s someone holds, in reply to a Q
+-- fac is A or H; phase is the zoneUID of creature GUIDs (digits). XM and XS come from Skyborne Compass; like SLLCM, we
+-- take them in and never send them. Per node and phase the newest report wins, sighting or "not there".
 --
 -- Rules: off until the player says yes (Options "shareSightings", asked once per account by UI/SharePrompt.lua);
 -- Skyborne characters only; and when SLLCM itself is loaded, Mapzeroth sends nothing and joins nothing, reading
@@ -23,7 +26,7 @@ addon.LeyShare = LeyShare
 local PREFIX = "SLLCM"
 local CHANNEL_BASE = "SLLCMShare"    -- + A / H
 local VERSION = "1"
-local TTL = 60 * 60                  -- a sighting is dropped this many seconds after it was made
+local TTL = 90 * 60                  -- a sighting is dropped this many seconds after it was made (a node was seen up 58+ min)
 local FUTURE = 60                    -- a sighting stamped further ahead than this is refused
 local SAME_YARDS = 60                -- two sightings closer than this (same phase, same map) are the same node
 local REPLY_MINE = { 1, 3 }          -- seconds to wait before answering a Q, holding a sighting of our own for its phase
@@ -118,17 +121,21 @@ end
 -- an Alliance alt's ley lines are never offered to Horde players. With SLLCM loaded its own table is read instead.
 ---------------------------------------------------------------------------
 
-local function ownReports()
+-- "Not there" reports are kept the same way, in MapzerothRebuildDB.sightingsGone.
+local function ownStore(key)
     MapzerothRebuildDB = MapzerothRebuildDB or {}
-    local all = MapzerothRebuildDB.sightings
+    local all = MapzerothRebuildDB[key]
     if type(all) ~= "table" then
         all = {}
-        MapzerothRebuildDB.sightings = all
+        MapzerothRebuildDB[key] = all
     end
     local tag = factionTag()
     all[tag] = type(all[tag]) == "table" and all[tag] or {}
     return all[tag]
 end
+
+local function ownReports() return ownStore("sightings") end
+local function ownGone() return ownStore("sightingsGone") end
 
 -- SLLCM 0.3.1 keeps them the same way, db.crowdReports[fac][mapID]; 0.3.0 had one list for both factions,
 -- crowdReports[mapID], which is still read for anyone on that version (the node match keeps the factions apart).
@@ -142,6 +149,16 @@ local function reports()
     return ownReports()
 end
 
+-- The "not there"s: SLLCM 0.4.1+ keeps them in db.crowdGone[fac][mapID] (none before that).
+local function goneReports()
+    if LeyShare:SllcmLoaded() then
+        local db = SkyborneMarkerDB
+        local all = type(db) == "table" and type(db.crowdGone) == "table" and db.crowdGone or {}
+        return type(all[factionTag()]) == "table" and all[factionTag()] or {}
+    end
+    return ownGone()
+end
+
 local function prune(list)
     local now = GetServerTime()
     for i = #list, 1, -1 do
@@ -149,20 +166,24 @@ local function prune(list)
     end
 end
 
--- Drop expired sightings, maps left empty, and the whole table once nothing is held (keeps the saved file small).
+-- Drop expired sightings and "not there"s, maps left empty, and a whole table once nothing is held (keeps the saved
+-- file small).
 local function pruneAll()
-    local all = MapzerothRebuildDB and MapzerothRebuildDB.sightings
-    if type(all) ~= "table" then return end
-    for _, byMap in pairs(all) do
-        for mapID, list in pairs(byMap) do
-            prune(list)
-            if #list == 0 then byMap[mapID] = nil end
+    for _, key in ipairs({ "sightings", "sightingsGone" }) do
+        local all = MapzerothRebuildDB and MapzerothRebuildDB[key]
+        if type(all) == "table" then
+            for _, byMap in pairs(all) do
+                for mapID, list in pairs(byMap) do
+                    prune(list)
+                    if #list == 0 then byMap[mapID] = nil end
+                end
+            end
+            for tag, byMap in pairs(all) do
+                if next(byMap) == nil then all[tag] = nil end
+            end
+            if next(all) == nil then MapzerothRebuildDB[key] = nil end
         end
     end
-    for tag, byMap in pairs(all) do
-        if next(byMap) == nil then all[tag] = nil end
-    end
-    if next(all) == nil then MapzerothRebuildDB.sightings = nil end
 end
 
 local function worldPos(mapID, x, y)
@@ -314,25 +335,81 @@ function LeyShare:WithShared(nodeIDs)
     return ids
 end
 
--- Keep a sighting (ours or someone else's). Returns true when it was kept.
-local function add(p, mapID, x, y, t, mine)
+-- Reports belong on zone maps. Skyborne Compass has been seen sending continent coordinates (Kalimdor, 1414): those
+-- move to the zone at that spot, or nil if no zone is there.
+local function onZoneMap(mapID, x, y)
+    local info = C_Map.GetMapInfo(mapID)
+    if not info then return nil end
+    local types = Enum and Enum.UIMapType
+    if not (types and info.mapType == types.Continent) then return mapID, x, y end
+    local zone = C_Map.GetMapInfoAtPosition and C_Map.GetMapInfoAtPosition(mapID, x, y)
+    if not (zone and zone.mapType == types.Zone) then return nil end
+    local ok, continent, world = pcall(C_Map.GetWorldPosFromMapPos, mapID, CreateVector2D(x, y))
+    if not (ok and world) then return nil end
+    local ok2, _, pos = pcall(C_Map.GetMapPosFromWorldPos, continent, world, zone.mapID)
+    if ok2 and pos then return zone.mapID, pos.x, pos.y end
+end
+
+-- A heard position on a zone map, fresh enough to keep; nil if not.
+local function valid(mapID, x, y, t)
     local now = GetServerTime()
-    if not (C_Map.GetMapInfo(mapID) and x >= 0 and x <= 1 and y >= 0 and y <= 1) then return false end
-    if t > now + FUTURE or now - t > TTL then return false end
-    learn(mapID, x, y)
+    if not (x >= 0 and x <= 1 and y >= 0 and y <= 1) or t > now + FUTURE or now - t > TTL then return nil end
+    mapID, x, y = onZoneMap(mapID, x, y)
+    if mapID and x >= 0 and x <= 1 and y >= 0 and y <= 1 then return mapID, x, y end
+end
+
+-- The entry for the same node in the same phase in a list, and its index.
+local function find(list, p, mapID, x, y)
+    if not list then return nil end
+    prune(list)
+    for i, e in ipairs(list) do
+        if e.phase == p and near(mapID, e.x, e.y, x, y) then return i, e end
+    end
+end
+
+-- Keep a sighting (ours or someone else's). Returns true when it was kept: not when "not there" was reported since.
+local function add(p, mapID, x, y, t, mine)
+    mapID, x, y = valid(mapID, x, y, t)
+    if not mapID then return false end
+    learn(mapID, x, y)                                      -- the place is real, whatever happened to it since
+    local gone = ownGone()
+    local gi, g = find(gone[mapID], p, mapID, x, y)
+    if g then
+        if g.t >= t then return false end                   -- found gone since
+        table.remove(gone[mapID], gi)
+    end
     local all = ownReports()
     local list = all[mapID] or {}
     all[mapID] = list
-    prune(list)
-    for _, e in ipairs(list) do
-        if e.phase == p and near(mapID, e.x, e.y, x, y) then
-            if t > e.t then e.x, e.y, e.t = x, y, t end
-            if mine then e.mine = true end
-            return true
-        end
+    local _, e = find(list, p, mapID, x, y)
+    if e then
+        if t > e.t then e.x, e.y, e.t = x, y, t end
+        if mine then e.mine = true end
+    else
+        list[#list + 1] = { phase = p, x = x, y = y, t = t, mine = mine or nil }
     end
-    list[#list + 1] = { phase = p, x = x, y = y, t = t, mine = mine or nil }
     return true
+end
+
+-- A "not there" (XM / XS): ends an older sighting of that node in that phase. Never teaches a place.
+local function addGone(p, mapID, x, y, t)
+    mapID, x, y = valid(mapID, x, y, t)
+    if not mapID then return end
+    local all = ownReports()
+    local ri, r = find(all[mapID], p, mapID, x, y)
+    if r then
+        if r.t >= t then return end                         -- seen since
+        table.remove(all[mapID], ri)
+    end
+    local gone = ownGone()
+    local list = gone[mapID] or {}
+    gone[mapID] = list
+    local _, g = find(list, p, mapID, x, y)
+    if g then
+        if t > g.t then g.t = t end
+    else
+        list[#list + 1] = { phase = p, x = x, y = y, t = t }
+    end
 end
 
 -- Only zones with nodes of ours (or a sighting of one) are worth asking about: the channel holds the whole faction.
@@ -390,7 +467,7 @@ local function coord(v)
     return math.floor(v * 10000 + 0.5)
 end
 
--- Ask once a session per phase, and only in the first hour on the channel: every R and S reaches every client
+-- Ask once a session per phase, and only in the first TTL (90 minutes) on the channel: every R and S reaches every client
 -- whatever its phase, so after that there is nothing from before we joined left to ask for.
 local function query()
     if not joinedAt and channelIndex() then joinedAt = GetTime() end
@@ -446,17 +523,18 @@ local function sendReply(p)
     end
 end
 
-local function addFields(p, mapID, x, y, t)
+-- One entry of an R / S (keep = add) or an XM / XS (keep = addGone).
+local function addFields(keep, p, mapID, x, y, t)
     mapID, x, y, t = tonumber(mapID), tonumber(x), tonumber(y), tonumber(t)
-    if mapID and x and y and t then add(p, mapID, x / 10000, y / 10000, t) end
+    if mapID and x and y and t then keep(p, mapID, x / 10000, y / 10000, t) end
 end
 
 -- One message from the channel (sender already known not to be us).
 function LeyShare:OnMessage(text)
     local kind, v, fac, p, rest = strsplit(":", text, 5)
     if v ~= VERSION or fac ~= factionTag() or not (p and p:match("^%d+$")) then return end
-    if kind == "R" and rest then
-        addFields(p, strsplit(":", rest))
+    if (kind == "R" or kind == "XM") and rest then
+        addFields(kind == "R" and add or addGone, p, strsplit(":", rest))
     elseif kind == "Q" then
         -- Answer after a random wait, unless someone else answers first: a short one when we saw a node there
         -- ourselves, a longer one when we only heard of it. One wait per phase.
@@ -479,9 +557,9 @@ function LeyShare:OnMessage(text)
             answering[p] = nil
             sendReply(p)
         end)
-    elseif kind == "S" and rest then
-        answering[p] = nil
-        for entry in rest:gmatch("[^;]+") do addFields(p, strsplit(",", entry)) end
+    elseif (kind == "S" or kind == "XS") and rest then
+        if kind == "S" then answering[p] = nil end          -- an XS isn't an answer about sightings: ours still goes out
+        for entry in rest:gmatch("[^;]+") do addFields(kind == "S" and add or addGone, p, strsplit(",", entry)) end
     end
 end
 
@@ -616,15 +694,15 @@ local function nodeWorld(node)
     return cached or nil
 end
 
--- { [nodeID] = seconds since it was last seen } for those of `nodeIDs` with a sighting in the player's current phase
--- in the last hour, and how many; nil when there are none (or the phase isn't known).
+-- { [nodeID] = seconds since the newest report } for those of `nodeIDs` with a report from `byMap` (sightings or "not
+-- there"s) in the player's current phase within TTL, and how many; nil when there are none (or the phase isn't known).
 -- nodeIDs may name shared nodes (WithShared).
-function LeyShare:SeenAmong(nodeIDs)
+local function reportedAmong(byMap, nodeIDs)
     if not (phase and tracking()) then return nil end
     local shared = {}
-    for _, place in ipairs(self:SharedPlaces()) do shared[place.id] = place end
+    for _, place in ipairs(LeyShare:SharedPlaces()) do shared[place.id] = place end
     local now, seen, count = GetServerTime(), {}, 0
-    for mapID, list in pairs(reports()) do
+    for mapID, list in pairs(byMap) do
         for _, r in ipairs(list) do
             local age = now - (r.t or 0)
             if r.phase == phase and age <= TTL and age >= -FUTURE then
@@ -643,6 +721,17 @@ function LeyShare:SeenAmong(nodeIDs)
     end
     if count == 0 then return nil end
     return seen, count
+end
+
+-- Those of `nodeIDs` seen up in the player's phase lately: { [nodeID] = seconds since }, and how many; or nil.
+function LeyShare:SeenAmong(nodeIDs)
+    return reportedAmong(reports(), nodeIDs)
+end
+
+-- Those of `nodeIDs` whose newest report in the player's phase is "not there" (XM / XS): { [nodeID] = seconds since },
+-- and how many; or nil. A sighting since removes the "not there", so a node is never in both.
+function LeyShare:GoneAmong(nodeIDs)
+    return reportedAmong(goneReports(), nodeIDs)
 end
 
 ---------------------------------------------------------------------------
@@ -782,15 +871,16 @@ end
 
 -- How much is held, for the dev tools: sightings, how many in the current phase, messages waiting to go, shared nodes.
 function LeyShare:Stats()
-    local count, here = 0, 0
+    local count, here, gone = 0, 0, 0
     for _, list in pairs(reports()) do
         for _, r in ipairs(list) do
             count = count + 1
             if r.phase == phase then here = here + 1 end
         end
     end
+    for _, list in pairs(goneReports()) do gone = gone + #list end
     return { networking = self:Networking(), sllcm = self:SllcmLoaded(), channel = channelIndex(), phase = phase,
-             tentative = tentativeNpc ~= nil, held = count, here = here, queued = #queue,
+             tentative = tentativeNpc ~= nil, held = count, here = here, gone = gone, queued = #queue,
              shared = #self:SharedPlaces() }
 end
 

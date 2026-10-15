@@ -55,7 +55,7 @@ addon.Options:Set("shareSightings", true)
 
 local function reset()
     LS:ResetForTests()
-    MapzerothRebuildDB.sightings, MapzerothRebuildDB.sharedNodes = nil, nil
+    MapzerothRebuildDB.sightings, MapzerothRebuildDB.sightingsGone, MapzerothRebuildDB.sharedNodes = nil, nil, nil
     sent, timers, delays = {}, {}, {}
 end
 
@@ -98,7 +98,7 @@ local function r(x, y, t, fac, v)
 end
 LS:OnMessage(r(2530, 3000, now - 600))
 LS:OnMessage(r(2540, 3010, now - 60))            -- 25 x 17 yards off: the same node
-LS:OnMessage(r(4800, 6050, now - 3700))          -- older than an hour
+LS:OnMessage(r(4800, 6050, now - 5500))          -- older than 90 minutes
 LS:OnMessage(r(4800, 6050, now + 120))           -- two minutes in the future
 LS:OnMessage(r(4800, 6050, now, "H"))
 LS:OnMessage(r(4800, 6050, now, "A", "2"))
@@ -121,6 +121,58 @@ LS:ReadGUID("Creature-0-1-2-9999-1-1")
 LS:ReadGUID("Creature-0-1-2-9999-2-1")
 plan = J:PlanEntry(session, pick)
 check(plan.goal == "LEYLINE_C1417_480_605" and plan.seenAge == nil, "in another phase, the nearest of them all")
+
+-- "Not there" (Skyborne Compass's XM / XS): per node and phase the newest report wins, and the pick skips a node
+-- reported not there in the player's phase.
+reset()
+LS:ReadGUID("Creature-0-1-2-3104-1234-0001")
+runTimers()
+sent = {}
+local function xm(x, y, t) return ("XM:1:A:3104:1417:%d:%d:%d"):format(x, y, t) end
+local both = { "LEYLINE_C1417_253_300", "LEYLINE_C1417_480_605" }
+LS:OnMessage(xm(4800, 6050, now - 30))
+local gone, goneCount = LS:GoneAmong(both)
+check(goneCount == 1 and gone["LEYLINE_C1417_480_605"] == 30, "an XM marks the node not there")
+check(LS:SeenAmong(both) == nil, "and it isn't seen")
+plan = J:PlanEntry(session, pick)
+check(plan.goal == "LEYLINE_C1417_253_300" and plan.seenAge == nil, "the pick skips it for the next nearest: " .. tostring(plan.goal))
+LS:OnMessage(r(4800, 6050, now - 100))
+check(LS:SeenAmong(both) == nil and LS:GoneAmong(both), "a sighting older than the XM changes nothing")
+LS:OnMessage(r(4800, 6050, now - 10))
+seen = LS:SeenAmong(both)
+check(seen and seen["LEYLINE_C1417_480_605"] == 10 and LS:GoneAmong(both) == nil, "a newer sighting ends the not there")
+plan = J:PlanEntry(session, pick)
+check(plan.goal == "LEYLINE_C1417_480_605" and plan.seenAge == 10, "and the pick goes there again")
+LS:OnMessage(("XS:1:A:3104:1417,4800,6050,%d;1417,2530,3000,%d"):format(now, now))
+gone, goneCount = LS:GoneAmong(both)
+check(goneCount == 2 and LS:SeenAmong(both) == nil, "an XS's entries are not-theres too, and a newer one ends the sighting")
+plan = J:PlanEntry(session, pick)
+check(plan.goal == "LEYLINE_C1417_480_605", "with every node not there, the nearest of them all")
+LS:OnMessage(xm(9000, 9000, now))
+check(#LS:SharedPlaces() == 0, "an XM never teaches a place")
+LS:OnMessage(("XM:1:A:3104:1417:4800:6050:%d"):format(now - 5500))
+check(#MapzerothRebuildDB.sightingsGone.A[1417] == 3, "a stale XM isn't kept (two nodes, and the far spot)")
+-- An XS doesn't answer a Q's sightings part: our S still goes out.
+LS:OnMessage(r(6000, 2000, now - 5))
+sent, timers = {}, {}
+LS:OnMessage("Q:1:A:3104")
+LS:OnMessage(("XS:1:A:3104:1417,100,100,%d"):format(now))
+runTimers()
+check(#sent == 1 and sent[1]:find("^S:1:A:3104:1417,6000,2000,"), "an XS doesn't cancel our answer: " .. tostring(sent[1]))
+-- Continent positions (Skyborne Compass has sent Kalimdor's) move to the zone at that spot.
+local savedInfo, savedEnum = C_Map.GetMapInfo, Enum
+Enum = { UIMapType = { Continent = 2, Zone = 3 } }
+C_Map.GetMapInfo = function(id) return { name = "map " .. id, mapType = id == 1415 and 2 or 3 } end
+C_Map.GetMapInfoAtPosition = function(id, x, y) return id == 1415 and x < 0.9 and { mapID = 1417, mapType = 3 } or nil end
+C_Map.GetMapPosFromWorldPos = function(_, world) return nil, CreateVector2D(world.x / 2500, world.y / 1700) end
+reset()
+LS:ReadGUID("Creature-0-1-2-3104-1234-0001")
+LS:OnMessage(("R:1:A:3104:1415:2530:3000:%d"):format(now))
+LS:OnMessage(("R:1:A:3104:1415:9500:9500:%d"):format(now))
+check(MapzerothRebuildDB.sightings.A[1415] == nil and #MapzerothRebuildDB.sightings.A[1417] == 1,
+    "a continent sighting is kept on the zone there, and one with no zone there is dropped")
+C_Map.GetMapInfo, Enum, C_Map.GetMapInfoAtPosition, C_Map.GetMapPosFromWorldPos = savedInfo, savedEnum, nil, nil
+MapzerothRebuildDB.sightingsGone = nil
 
 -- Shared nodes: a sighting where our data has no node is kept as one (whatever the phase), and the pick can go there.
 reset()
@@ -196,7 +248,7 @@ check(#delays == 1 and delays[1] >= 1 and delays[1] <= 3, "holding our own: a 1-
 runTimers()
 check(#sent == 1 and sent[1]:find("4800,6050", 1, true), "and the answer carries it: " .. tostring(sent[1]))
 
--- Asking: once a session per phase, and not after the first hour on the channel.
+-- Asking: once a session per phase, and not after the first 90 minutes on the channel.
 reset()
 LS:ReadGUID("Creature-0-1-2-3104-1234-0001")
 runTimers()
@@ -209,11 +261,11 @@ LS:ReadGUID("Creature-0-1-2-3104-5678-0007")
 runTimers()
 check(#sent == 2 and sent[2] == "Q:1:A:4200" and LS:Phase() == "3104",
     "4200 is asked about once, and back in 3104 minutes later, 3104 isn't again: " .. #sent)
-clock = clock + 3600
+clock = clock + 5400
 LS:ReadGUID("Creature-0-1-2-6000-1111-0008")
 LS:ReadGUID("Vehicle-0-1-2-6000-2222-0009")
 runTimers()
-check(LS:Phase() == "6000" and #sent == 2, "after an hour on the channel nothing is asked: every R and S since has been heard")
+check(LS:Phase() == "6000" and #sent == 2, "after 90 minutes on the channel nothing is asked: every R and S since has been heard")
 
 -- Our own find: before the phase is known it waits, and goes out once it is (in the same zone).
 reset()
