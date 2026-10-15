@@ -1003,6 +1003,12 @@ ns.Nodes.EK_OVERWORLD = {
         x = 0.4798,
         y = 0.5181
     },
+    SILVERMOON_COILED_ISLE_PORTAL = {
+        name = "Portal to the Coiled Isle",
+        mapID = 2393,
+        x = 0.5684,
+        y = 0.6738
+    },
     MAGISTERS_SILVERMOON_PORTAL = {
         name = "Portal to Silvermoon City",
         mapID = 2649,
@@ -1116,6 +1122,12 @@ ns.Nodes.EK_OVERWORLD = {
         mapID = 2509,
         x = 0.4557,
         y = 0.1165
+    },
+    COILED_ISLE_SILVERMOON_PORTAL = {
+        name = "Portal to Astalor's Sanctum",
+        mapID = 2512,
+        x = 0.5822,
+        y = 0.4848
     },
     -- Dungeons
     SHADOWFANG_KEEP_DUNGEON = {

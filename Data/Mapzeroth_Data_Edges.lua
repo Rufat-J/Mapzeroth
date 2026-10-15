@@ -1731,6 +1731,14 @@ ns.Edges = {
     method = "portal",
     oneway = true
 }, {
+    from = "SILVERMOON_COILED_ISLE_PORTAL",
+    to = "COILED_ISLE_SILVERMOON_PORTAL",
+    method = "portal",
+    requirements = {
+        quest = 96474
+    }
+},
+{
     from = "TOKKAS_LANDING_FLIGHT",
     to = "AMANI_FOOTHOLD_FLIGHT",
     method = "flight",

@@ -2,7 +2,7 @@
 ## Title: Mapzeroth
 ## Notes: Intelligent travel routing addon
 ## Author: tr0tsky
-## Version: 1.6.0
+## Version: 1.6.2
 ## SavedVariables: MapzerothDB
 ## AddonCompartmentFunc: Mapzeroth_OnAddonCompartmentClick
 ## AddonCompartmentFuncOnEnter: Mapzeroth_OnAddonCompartmentEnter
@@ -32,7 +32,6 @@ Data\Mapzeroth_Data_Nodes_Draenor.lua
 Data\Mapzeroth_Data_Nodes_Zandalar.lua
 Data\Mapzeroth_Data_Nodes_Argus.lua
 Data\Mapzeroth_Data_Edges.lua
-PetTrainers.lua
 MapNames.lua
 PlayerAbilities.lua
 TravelGraph.lua
