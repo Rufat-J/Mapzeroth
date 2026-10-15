@@ -197,3 +197,28 @@ convergence	1413	54.6	14.9	-	The Barrens
 convergence	1421	54.98	66.02	-	Silverpine Forest
 convergence	1421	60.89	79.96	-	Silverpine Forest
 convergence	1421	49.39	52.72	-	Silverpine Forest
+# Synced with Skyborne Ley Line & Convergence Marker's Data.lua (Dev), 2026-10-14; some of its points are from Wowhead.
+leyline	1413	44.3	16.0	-	The Barrens
+leyline	1413	44.6	90.4	-	The Barrens
+leyline	1413	46.7	39.2	-	The Barrens
+leyline	1413	46.8	82.7	-	The Barrens
+leyline	1413	48.6	24.1	-	The Barrens
+leyline	1413	48.9	36.3	-	The Barrens
+leyline	1413	51.7	48.5	-	The Barrens
+leyline	1426	76.8	51.9	-	Dun Morogh
+leyline	1433	68.5	44.3	-	Redridge Mountains
+leyline	1437	14.7	37.3	-	Wetlands
+leyline	1437	46.3	25.3	-	Wetlands
+leyline	1437	55.0	29.7	-	Wetlands
+convergence	1411	41.81	21.82	-	Durotar
+convergence	1413	46.97	80.24	-	The Barrens
+convergence	1413	56.33	41.65	-	The Barrens
+convergence	1421	55.47	24.09	-	Silverpine Forest
+convergence	1421	45.5	21.0	-	Silverpine Forest
+convergence	1421	48.1	75.4	-	Silverpine Forest
+convergence	1421	56.0	46.4	-	Silverpine Forest
+convergence	1440	48.11	69.51	-	Ashenvale
+convergence	1441	67.28	62.08	-	Thousand Needles
+convergence	1442	72.59	57.53	-	Stonetalon Mountains
+convergence	1445	32.98	30.82	-	Dustwallow Marsh
+convergence	2548	33.62	39.36	-	Riverglades
