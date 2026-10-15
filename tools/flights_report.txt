@@ -11,7 +11,8 @@ with a different set. Leg times don't have that problem.
 
 Sources: which pairs are legs, and each leg's `fare` (copper, before any discount), is the game's own
 flight table (Classic Era TaxiPath, tools/flight_source/taxipath_classic_1.15.9.txt); the times are
-InFlight's per-direction ticket times for those pairs (tools/flight_source/inflight_tickets.lua).
+InFlight's per-direction ticket times for those pairs (tools/flight_source/inflight_tickets.lua),
+except where we timed the leg in game (tools/flight_source/flight_samples.tsv).
 Directions are separate: they differ. A ticket costs the sum of its legs' fares.
 
 Every leg written:
@@ -284,3 +285,4 @@ Every leg written:
 
 Alliance: 130 directed legs, 0 with an estimated time; rebuilt vs 422 InFlight tickets: within 5% 59%, 10% 89%, 20% 95%, median -1.1%, 0 unreachable
 Horde: 136 directed legs, 0 with an estimated time; rebuilt vs 459 InFlight tickets: within 5% 53%, 10% 96%, 20% 98%, median -4.7%, 0 unreachable
+0 flight(s) timed in game, 0 leg(s) measured:

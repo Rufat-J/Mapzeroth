@@ -13,6 +13,11 @@ Where InFlight has no time for a leg in either direction, the time is estimated 
 the two points (at the median speed of the timed legs on that continent; about 16% off on legs we can
 check), and the report says so.
 
+Flights timed in game (tools/flight_source/flight_samples.tsv, from tools/merge_flight_times.py) win over
+both: a single-leg flight's median base time (raw time times the Frequent Flier speed-up where the flyer
+had it) replaces the leg's time, in both factions' data. Through-tickets are only checked against the
+legs, in the report.
+
     python tools/gen_flights.py
 """
 import heapq
@@ -27,6 +32,7 @@ SRC = ROOT / "tools" / "flight_source"
 DATA = ROOT / "Data" / "Forever"
 
 CHAIN_SAVING = 0.10             # fraction of an extra leg's time saved; keep equal to addon.FLIGHT_CHAIN_SAVING
+MEASURED_DIFF = 3               # seconds: a measured leg further than this from the old time is listed in the report
 
 # Fare 0 marks ship, zeppelin and dialog paths in the game's table, and these two pairs are the ones between
 # flight points that we keep as legs anyway: the Teldrassil ferry, which InFlight timed at 84 and 86 s.
@@ -65,6 +71,69 @@ def read_tickets():
                          r'requirements = \{ faction = "(\w+)" \}', text):
         tickets[(m.group(1), m.group(2), m.group(4))] = int(m.group(3))
     return tickets
+
+
+def flier_speedup():
+    """1 + Frequent Flier's speed bonus, from Data/Forever/Game.lua."""
+    text = (DATA / "Game.lua").read_text(encoding="utf-8")
+    return 1 + float(re.search(r"FREQUENT_FLIER = \{[^}]*speedBonus = ([\d.]+)", text).group(1))
+
+
+def read_samples():
+    """The flights timed in game: [{"from", "stops", "faction", "flier", "raw", "base"}], base being the time
+    without Frequent Flier."""
+    path = SRC / "flight_samples.tsv"
+    if not path.exists():
+        return []
+    speedup, out = flier_speedup(), []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line or line.startswith("#"):
+            continue
+        _, faction, flier, seconds, start, stops = line.split("	")
+        raw = float(seconds)
+        out.append({"from": start, "stops": stops.split(","), "faction": faction, "flier": flier == "1",
+                    "raw": raw, "base": raw * speedup if flier == "1" else raw})
+    return out
+
+
+def apply_samples(times, samples, names):
+    """Replaces leg times with the median measured one; returns the report's lines."""
+    def name(x): return names.get(x, x)
+    legs, report = {}, []
+    for s in samples:
+        if len(s["stops"]) == 1:
+            legs.setdefault((s["from"], s["stops"][0]), []).append(s)
+    measured = {}
+    for (a, b), group in sorted(legs.items()):
+        t = round(statistics.median(s["base"] for s in group))
+        measured[(a, b)] = t
+        old = sorted({v for (x, y, f), v in times.items() if (x, y) == (a, b)})
+        if not old:
+            report.append(f"  WARNING: timed {name(a)} -> {name(b)} ({t}s) is not a leg in the table: left out")
+            continue
+        for k in [k for k in times if k[:2] == (a, b)]:
+            times[k] = t
+        if abs(t - old[0]) > MEASURED_DIFF:
+            report.append(f"  {name(a)} -> {name(b)}: measured {t}s, was {old[0]}s ({t - old[0]:+d}), {len(group)} flight(s)")
+        both = {s["flier"] for s in group}
+        if both == {True, False}:                       # the same leg with and without the perk: is the speed-up right?
+            plain = statistics.median(s["raw"] for s in group if not s["flier"])
+            fast = statistics.median(s["raw"] for s in group if s["flier"])
+            report.append(f"  Frequent Flier check {name(a)} -> {name(b)}: {plain:.1f}s without, {fast:.1f}s with "
+                          f"(x{plain / fast:.3f}; the data assumes x{flier_speedup():.3f})")
+    for s in samples:
+        if len(s["stops"]) > 1:
+            total, at, ok = 0, s["from"], True
+            for i, b in enumerate(s["stops"]):
+                k = next((k for k in times if k[:2] == (at, b)), None)
+                if not k:
+                    ok = False
+                    break
+                total, at = total + times[k] * (1 - (CHAIN_SAVING if i else 0)), b
+            route = " > ".join(name(x) for x in [s["from"]] + s["stops"])
+            report.append(f"  through-ticket {route}: {s['base']:.0f}s base, legs say "
+                          + (f"{total:.0f}s ({s['base'] - total:+.0f})" if ok else "nothing (a leg isn't in the table)"))
+    return measured, [f"{len(samples)} flight(s) timed in game, {len(measured)} leg(s) measured:"] + report
 
 
 def read_taxipath():
@@ -228,6 +297,8 @@ def main():
     missing_nodes = sorted({x for (a, b, f) in taxi for x in (a, b) if x not in names})
     taxi = {k: v for k, v in taxi.items() if k[0] in names and k[1] in names}
     times, estimated = leg_times(taxi, tickets, read_positions())
+    measured, measured_report = apply_samples(times, read_samples(), names)
+    estimated = [k for k in estimated if k[:2] not in measured]
 
     report = []
     if missing_nodes:
@@ -250,9 +321,10 @@ def main():
                       f"{unreachable} unreachable")
     for k in sorted(estimated):
         report.append(f"  estimated {times[k]}s: {names[k[0]]} -> {names[k[1]]} ({k[2]})")
+    report += measured_report
 
     for (a, b, f), t in sorted(times.items(), key=lambda kv: (kv[0][2], int(kv[0][0][5:]), int(kv[0][1][5:]))):
-        note = " (estimated from distance)" if (a, b, f) in estimated else ""
+        note = " (estimated from distance)" if (a, b, f) in estimated else " (timed in game)" if (a, b) in measured else ""
         lines.append(f'    {{ from = "{a}", to = "{b}", method = "taxi", cost = {t}, fare = {taxi[(a, b, f)]}, '
                      f'requirements = {{ faction = "{f}" }} }},')
         legs_named.append(f"  {a} -> {b} ({f}): {names[a]} -> {names[b]}, {t}s, {taxi[(a, b, f)]}c{note}")
@@ -268,7 +340,8 @@ with a different set. Leg times don't have that problem.
 
 Sources: which pairs are legs, and each leg's `fare` (copper, before any discount), is the game's own
 flight table (Classic Era TaxiPath, tools/flight_source/taxipath_classic_1.15.9.txt); the times are
-InFlight's per-direction ticket times for those pairs (tools/flight_source/inflight_tickets.lua).
+InFlight's per-direction ticket times for those pairs (tools/flight_source/inflight_tickets.lua),
+except where we timed the leg in game (tools/flight_source/flight_samples.tsv).
 Directions are separate: they differ. A ticket costs the sum of its legs' fares.'''
     (ROOT / "tools" / "flights_report.txt").write_text(
         "Written by gen_flights.py each run; not read by the addon.\n\n" + explain + "\n\nEvery leg written:\n"
