@@ -100,3 +100,10 @@ check(E.saved ~= nil and worn[15] == 9001, "in combat it waits")
 InCombatLockdown = function() return false end
 E:Sync(nil)
 check(E.saved == nil and worn[15] == 555, "and puts things back after it")
+
+-- The panel's "You're already here" is for a few seconds of moving yourself, not a quick teleport.
+local quick = planFor({ items = { 9002 }, equippable = { 9002 } })
+quick.cost = 10
+check(not addon.Panel.AlreadyThere(quick), "a quick equip-and-use trip shows its time, not \"already here\"")
+check(addon.Panel.AlreadyThere({ cost = 8, steps = { { method = "walk" } } }), "a few seconds' walk is \"already here\"")
+check(not addon.Panel.AlreadyThere({ cost = 25, steps = { { method = "walk" } } }), "a longer walk shows its time")
