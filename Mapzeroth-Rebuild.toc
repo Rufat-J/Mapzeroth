@@ -1,4 +1,4 @@
-## Interface: 16001, 120100
+## Interface: 16001, 120105
 ## Title: Mapzeroth (Rebuild)
 ## Notes: Rebuilt Mapzeroth engine, Forever and Modern datasets (development build)
 ## Author: tr0tsky
