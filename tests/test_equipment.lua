@@ -56,10 +56,18 @@ nav:Stop()
 -- Equipment: what it puts on, what it puts back.
 local worn, calls = { [15] = 555 }, {}
 GetInventoryItemID = function(_, slot) return worn[slot] end
-IsEquippedItem = function(id) for _, v in pairs(worn) do if v == id then return true end end return false end
 InCombatLockdown = function() return false end
-C_Item = { GetItemInfoInstant = function(id) return id, "Armor", "Cloth", "INVTYPE_CLOAK" end }
-EquipItemByName = function(id, slot) calls[#calls + 1] = "equip " .. id .. "@" .. slot; worn[slot] = id end
+-- Retail 12.x's shape: the item functions only in C_Item, no globals.
+IsEquippedItem, EquipItemByName, IsEquippableItem = nil, nil, nil
+C_Item = {
+    GetItemInfoInstant = function(id) return id, "Armor", "Cloth", "INVTYPE_CLOAK" end,
+    IsEquippedItem = function(id) for _, v in pairs(worn) do if v == id then return true end end return false end,
+    IsEquippableItem = function(id) return id == 9001 end,
+    EquipItemByName = function(id, slot) calls[#calls + 1] = "equip " .. id .. "@" .. slot; worn[slot] = id end,
+}
+local live = addon:GetPlayerContext()
+check(live.isEquippable(9001) and not live.isEquippable(9002), "the player's context finds wearable items through C_Item")
+check(not live.isEquipped(9001), "and whether they're worn")
 PickupInventoryItem = function(slot) calls[#calls + 1] = "pickup " .. slot; worn[slot] = nil end
 PutItemInBackpack = function() calls[#calls + 1] = "backpack" end
 

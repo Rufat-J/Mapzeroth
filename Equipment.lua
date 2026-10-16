@@ -46,7 +46,8 @@ Equipment.saved = nil
 -- Puts the item on, remembering what it replaces. False (and why) if it can't be done now.
 function Equipment:Equip(itemID)
     if InCombatLockdown and InCombatLockdown() then return false, "combat" end
-    if IsEquippedItem and IsEquippedItem(itemID) then return true end
+    local isEquipped = addon.ItemFn("IsEquippedItem")
+    if isEquipped and isEquipped(itemID) then return true end
     local slot = self:SlotFor(itemID)
     if not slot then return false, "slot" end
     if not (self.saved and self.saved.itemID == itemID) then
@@ -56,7 +57,7 @@ function Equipment:Equip(itemID)
             previousOffhand = twoHand and GetInventoryItemID("player", OFFHAND) or nil,
         }
     end
-    EquipItemByName(itemID, slot)
+    addon.ItemFn("EquipItemByName")(itemID, slot)
     return true
 end
 
@@ -68,12 +69,12 @@ function Equipment:Restore()
     if InCombatLockdown and InCombatLockdown() then return false end
     if GetInventoryItemID("player", saved.slot) == saved.itemID then
         if saved.previous then
-            EquipItemByName(saved.previous, saved.slot)
+            addon.ItemFn("EquipItemByName")(saved.previous, saved.slot)
         else
             PickupInventoryItem(saved.slot)             -- the slot was empty: the item goes to the backpack
             PutItemInBackpack()
         end
-        if saved.twoHand and saved.previousOffhand then EquipItemByName(saved.previousOffhand, OFFHAND) end
+        if saved.twoHand and saved.previousOffhand then addon.ItemFn("EquipItemByName")(saved.previousOffhand, OFFHAND) end
     end
     self.saved = nil
     return true

@@ -567,7 +567,8 @@ update = function(sample)
 end
 
 local function equipped(itemID)
-    return IsEquippedItem ~= nil and IsEquippedItem(itemID) and true or false
+    local f = addon.ItemFn("IsEquippedItem")
+    return f ~= nil and f(itemID) and true or false
 end
 
 -- Where the player is right now, as a sample (needs the client).
