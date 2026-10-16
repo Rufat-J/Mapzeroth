@@ -1,0 +1,257 @@
+-- What the client reported at Stormwind's flight master on the Forever beta, for a
+-- character that had found only Stormwind, Sentinel Hill, Ironforge and Menethil Harbor
+-- (Enum.FlightPathState: Current 0, Reachable 1, Unreachable 2). Node ids are ours.
+useTestDistances()
+addon.World:Build()
+
+local CURRENT, REACHABLE, UNREACHABLE = 0, 1, 2
+local capture = {
+    { nodeID = 2, state = CURRENT },                        -- Stormwind
+    { nodeID = 4, state = REACHABLE },                      -- Sentinel Hill
+    { nodeID = 6, state = REACHABLE },                      -- Ironforge
+    { nodeID = 7, state = REACHABLE },                      -- Menethil Harbor
+    { nodeID = 5, state = UNREACHABLE },                    -- Lakeshire
+    { nodeID = 8, state = UNREACHABLE },                    -- Thelsamar
+    { nodeID = 12, state = UNREACHABLE },                   -- Darkshire (Sentinel Hill, Ironforge and Menethil fly there)
+    { nodeID = 14, state = UNREACHABLE },                   -- Southshore
+    { nodeID = 16, state = UNREACHABLE },                   -- Refuge Pointe
+    { nodeID = 19, state = UNREACHABLE },                   -- Booty Bay
+    { nodeID = 43, state = UNREACHABLE },                   -- Aerie Peak
+    { nodeID = 45, state = UNREACHABLE },                   -- Nethergarde Keep
+    { nodeID = 66, state = UNREACHABLE },                   -- Chillwind Camp
+    { nodeID = 67, state = UNREACHABLE },                   -- Light's Hope Chapel
+    { nodeID = 71, state = UNREACHABLE },                   -- Morgan's Vigil
+    { nodeID = 74, state = UNREACHABLE },                   -- Thorium Point
+}
+
+local FK = addon.FlightKnowledge
+local ali = makeCtx({ faction = "Alliance" })
+
+FK:Reset()
+check(FK:IsFound("TAXI_6") == nil, "nothing is known before a flight map opens")
+FK:Record(capture, ali)
+
+-- Reachable and current points are found.
+for _, id in ipairs({ "TAXI_2", "TAXI_4", "TAXI_6", "TAXI_7" }) do
+    check(FK:IsFound(id) == true, id .. " is found")
+end
+-- Points a found point has a flight leg to, that came back Unreachable, are not found: had one been
+-- found, that leg would have made it Reachable. Every one of these has a leg from Stormwind, Ironforge
+-- or Menethil Harbor.
+for _, id in ipairs({ "TAXI_5", "TAXI_8", "TAXI_12", "TAXI_14", "TAXI_16", "TAXI_19", "TAXI_43", "TAXI_45",
+                      "TAXI_66", "TAXI_67", "TAXI_71", "TAXI_74" }) do
+    check(FK:IsFound(id) == false, id .. " is not found")
+end
+-- Aerie Peak and Chillwind Camp have no leg from Sentinel Hill (they are reached through Ironforge or
+-- Southshore), so from there nothing says either way.
+FK:Reset()
+FK:Record({ { nodeID = 4, state = CURRENT }, { nodeID = 43, state = UNREACHABLE }, { nodeID = 66, state = UNREACHABLE } }, ali)
+check(FK:IsFound("TAXI_43") == nil and FK:IsFound("TAXI_66") == nil, "points with no leg from a found point stay unknown")
+FK:Reset()
+FK:Record(capture, ali)
+-- A point nothing found flies to is left unknown (here, an Orgrimmar entry on the wrong continent).
+local mixed = { { nodeID = 2, state = CURRENT }, { nodeID = 23, state = UNREACHABLE } }
+FK:Record(mixed, ali)
+check(FK:IsFound("TAXI_23") == nil, "a point no found point flies to stays unknown")
+
+-- Horde edges don't count for an Alliance player, so a Horde-only neighbour isn't judged.
+FK:Reset()
+FK:Record({ { nodeID = 23, state = CURRENT }, { nodeID = 22, state = UNREACHABLE } }, makeCtx({ faction = "Horde" }))
+check(FK:IsFound("TAXI_22") == false, "Thunder Bluff is a direct Horde flight from Orgrimmar, and not found")
+FK:Reset()
+FK:Record({ { nodeID = 23, state = CURRENT }, { nodeID = 22, state = UNREACHABLE } }, ali)
+check(FK:IsFound("TAXI_22") == nil, "an Alliance player has no such flight, so nothing is learned about it")
+
+-- Routing only flies into points known to be found. Unknown is not enough.
+FK:Reset()
+local withKnowledge = makeCtx({ faction = "Alliance" })
+setFlights(withKnowledge, function(id) return FK:IsFound(id) end)
+
+local function flights(result)
+    local n = 0
+    for _, step in ipairs(result.steps) do if step.method == "taxi" then n = n + 1 end end
+    return n
+end
+local nothingYet = route(withKnowledge, "TAXI_2", "TAXI_6")
+check(nothingYet and flights(nothingYet) == 0, "before any flight map has been read, routes use no flights")
+
+FK:Record(capture, ali)
+
+local function flownInto(result, nodeID)
+    for _, step in ipairs(result.steps) do
+        if step.method == "taxi" and step.to == nodeID then return true end
+    end
+    return false
+end
+local without = route(ali, "TAXI_2", "TAXI_8")
+check(without and flownInto(without, "TAXI_8"), "with no knowledge the route flies to Thelsamar")
+local knowing = route(withKnowledge, "TAXI_2", "TAXI_8")
+check(knowing and not flownInto(knowing, "TAXI_8"), "knowing Thelsamar isn't found, the route doesn't fly to it")
+check(knowing.cost > without.cost, "and it takes longer")
+
+local toIronforge = route(withKnowledge, "TAXI_2", "TAXI_6")
+check(toIronforge and methods(toIronforge) == "taxi", "Ironforge is found, so it is still a single flight")
+local toDarkshire = route(withKnowledge, "TAXI_2", "TAXI_12")
+check(toDarkshire and not flownInto(toDarkshire, "TAXI_12"), "Darkshire isn't found: reached on foot, or by flying to Sentinel Hill first")
+check(flights(toDarkshire) == 0 or flownInto(toDarkshire, "TAXI_4"), "the only flight it may use is one into a found point")
+
+-- A continent the flight map hasn't been read for stays unusable (the capture was Eastern Kingdoms).
+local horde = makeCtx({ faction = "Horde" })
+setFlights(horde, function(id) return FK:IsFound(id) end)
+local orgToTB = route(horde, "TAXI_23", "TAXI_22")
+check(orgToTB and not flownInto(orgToTB, "TAXI_22"), "Thunder Bluff is unknown, so no flight into it")
+
+-- The far end of a flight must be found too: Thelsamar -> Stormwind is a valid flight
+-- to a found point, but the player can't be standing at Thelsamar's flight master
+-- without having found it, so that direction is left alone.
+local fromThelsamar = route(withKnowledge, "TAXI_8", "TAXI_2")
+check(fromThelsamar and flownInto(fromThelsamar, "TAXI_2"), "flying out of an unfound point into a found one is allowed")
+
+-- Found beats not found, and a new flight path clears the not-founds.
+FK:Record({ { nodeID = 8, state = CURRENT }, { nodeID = 2, state = REACHABLE } }, ali)
+check(FK:IsFound("TAXI_8") == true, "standing at Thelsamar's flight master marks it found")
+FK:ForgetNotFound()
+check(FK:IsFound("TAXI_19") == nil and FK:IsFound("TAXI_8") == true, "a new flight path forgets the not-founds, not the founds")
+
+-- Reading it from the client, as the flight map opens.
+FK:Reset()
+UnitName = function() return "Tester" end
+GetRealmName = function() return "Realm" end
+GetTaxiMapID = function() return 1415 end
+C_TaxiMap = C_TaxiMap or {}
+C_TaxiMap.GetAllTaxiNodes = function(mapID)
+    check(mapID == 1415, "asks about the flight map's own map")
+    return capture
+end
+FK:OnTaxiMapOpened(ali)
+check(FK:IsFound("TAXI_7") == true and FK:IsFound("TAXI_8") == false, "OnTaxiMapOpened records what the client reports")
+GetTaxiMapID = nil
+
+-- Saved per character and loaded back.
+check(MapzerothRebuildDB.flights["Tester-Realm"]["TAXI_7"] == true, "saved under the character")
+FK:Reset()
+check(FK:IsFound("TAXI_7") == nil, "reset forgets")
+FK:Load()
+check(FK:IsFound("TAXI_7") == true and FK:IsFound("TAXI_8") == false, "load restores it")
+
+-- Where a chosen flight goes: the game's route for the slot the player clicked, as node ids.
+GetTaxiMapID = function() return 1415 end
+C_TaxiMap.GetAllTaxiNodes = function()
+    return { { nodeID = 2, slotIndex = 1 }, { nodeID = 6, slotIndex = 2 }, { nodeID = 7, slotIndex = 3 }, { nodeID = 14, slotIndex = 4 } }
+end
+GetNumRoutes = function(slot) return slot == 4 and 3 or 1 end
+TaxiGetNodeSlot = function(slot, hop, source)
+    if slot == 4 then return ({ 2, 3, 4 })[hop] end       -- Southshore: Ironforge, Menethil, itself
+    return slot
+end
+local stops = FK:StopsForSlot(2)
+check(stops and #stops == 1 and stops[1] == "TAXI_6", "a direct flight lands at its destination")
+stops = FK:StopsForSlot(4)
+check(stops and #stops == 3 and stops[1] == "TAXI_6" and stops[2] == "TAXI_7" and stops[3] == "TAXI_14",
+    "a ticket through other points lists each stop in order, ending at the destination")
+check(FK:StopsForSlot(99) == nil and FK:StopsForSlot(nil) == nil, "an unknown slot gives nothing")
+GetTaxiMapID = nil
+
+-- The player's discount is learned from the client's prices. Stormwind to Ironforge is a leg of 50 copper;
+-- Menethil Harbor is that plus Ironforge to Menethil Harbor's 330, by way of Ironforge: 380 in all. A player
+-- who pays 96% of that pays 48 and 365.
+FK:Reset()
+check(FK:FareFactor() == 1, "no discount is assumed before a price has been seen")
+GetTaxiMapID = function() return 1415 end
+C_TaxiMap.GetAllTaxiNodes = function()
+    return { { nodeID = 2, slotIndex = 1, state = 0 }, { nodeID = 6, slotIndex = 2, state = 1 }, { nodeID = 7, slotIndex = 3, state = 1 } }
+end
+GetNumRoutes = function(slot) return slot == 3 and 2 or 1 end
+TaxiGetNodeSlot = function(slot, hop) if slot == 3 then return ({ 2, 3 })[hop] end return slot end
+TaxiNodeCost = function(slot) return ({ 0, 48, 365 })[slot] end
+UnitName = function() return "Tester" end
+GetRealmName = function() return "Realm" end
+FK:OnTaxiMapOpened(ali)
+check(math.abs(FK:FareFactor() - 0.96) < 0.01, "a flight window's prices give the factor: " .. tostring(FK:FareFactor()))
+check(math.abs(FK:FareFactor("TAXI_2") - 0.96) < 0.01, "for the flight master they were read at")
+check(FK:FareFactor("TAXI_6") == FK:FareFactor(), "and a flight master not seen yet gets the general one")
+-- The prices read go to a tool if one is listening; the engine keeps none.
+check(FK.FareSamples == nil, "the engine keeps no samples of its own")
+local heard
+FK.onFares = function(from, samples) heard = { from = from, samples = samples } end
+FK:OnTaxiMapOpened(ali)
+check(heard and heard.from == "TAXI_2" and #heard.samples == 2 and heard.samples[1].paid and heard.samples[1].base,
+    "the prices read are handed to the tool that listens")
+FK.onFares = nil
+-- Another flight master with a different discount (a different faction's reputation): its own factor.
+C_TaxiMap.GetAllTaxiNodes = function()
+    return { { nodeID = 6, slotIndex = 2, state = 0 }, { nodeID = 2, slotIndex = 1, state = 1 } }
+end
+TaxiNodeCost = function(slot) return ({ 50, 0 })[slot] end       -- Ironforge to Stormwind at full price
+FK:OnTaxiMapOpened(ali)
+check(FK:FareFactor("TAXI_6") == 1 and math.abs(FK:FareFactor("TAXI_2") - 0.96) < 0.01, "each flight master keeps its own")
+check(FK:FareFactor("TAXI_14") == 1, "and one not seen yet is assumed to give the least discount seen, never more")
+C_TaxiMap.GetAllTaxiNodes = function()
+    return { { nodeID = 2, slotIndex = 1, state = 0 }, { nodeID = 6, slotIndex = 2, state = 1 }, { nodeID = 7, slotIndex = 3, state = 1 } }
+end
+TaxiNodeCost = function(slot) return ({ 0, 48, 365 })[slot] end
+FK:OnTaxiMapOpened(ali)
+FK:Save()
+FK:Reset()
+check(FK:FareFactor() == 1, "reset forgets it")
+FK:Load()
+check(math.abs(FK:FareFactor("TAXI_2") - 0.96) < 0.01 and FK:FareFactor("TAXI_6") == 1 and FK:FareFactor("TAXI_14") == 1,
+    "and it is saved with the character, per flight master")
+
+-- ForgetFares drops the learned factors but not the found flight points.
+check(FK:IsFound("TAXI_2") == true, "sanity: TAXI_2 is found going into ForgetFares")
+FK:ForgetFares()
+check(FK:FareFactor() == 1 and FK:FareFactor("TAXI_2") == 1, "ForgetFares forgets every learned factor")
+check(FK:IsFound("TAXI_2") == true, "ForgetFares leaves found flight points alone")
+
+-- FACTION_STANDING_CHANGED (a real standing tier crossing, unlike UPDATE_FACTION which fires on
+-- every reputation tick) forgets the learned factors so the next window relearns.
+FK:Reset()
+GetTaxiMapID = function() return 1415 end
+C_TaxiMap.GetAllTaxiNodes = function()
+    return { { nodeID = 2, slotIndex = 1, state = 0 }, { nodeID = 6, slotIndex = 2, state = 1 } }
+end
+GetNumRoutes = function() return 1 end
+TaxiGetNodeSlot = function(slot) return slot end
+TaxiNodeCost = function(slot) return ({ 0, 48 })[slot] end
+FK:OnTaxiMapOpened(ali)
+check(math.abs(FK:FareFactor() - 0.96) < 0.01, "sanity: a factor is learned before the faction test")
+
+FK:OnFactionChanged()
+check(FK:FareFactor() == 1, "a standing change forgets the learned factor")
+check(MapzerothRebuildDB.fareFactors["Tester-Realm"].typical == nil, "and persists the forgetting immediately")
+
+-- Frequent Flier halves fares: factors learned without it are forgotten once it is unlocked, and the
+-- saved factors remember which side of it they were learned on.
+FK:OnTaxiMapOpened(ali)
+FK:OnSpellsChanged()
+check(math.abs(FK:FareFactor() - 0.96) < 0.01, "a spellbook change that isn't the perk keeps the factors")
+local savedIsPlayerSpell = IsPlayerSpell
+IsPlayerSpell = function(id) return id == addon.FREQUENT_FLIER.spellID end
+FK:OnSpellsChanged()
+check(FK:FareFactor() == 1, "unlocking Frequent Flier forgets the factors learned without it")
+check(MapzerothRebuildDB.fareFactors["Tester-Realm"].typical == nil, "and persists the forgetting")
+TaxiNodeCost = function(slot) return ({ 0, 25 })[slot] end      -- half of 50
+FK:OnTaxiMapOpened(ali)
+check(math.abs(FK:FareFactor() - 0.5) < 0.01, "the next window learns the perk's price")
+FK:Save()
+FK:Reset()
+FK:Load()
+FK:OnSpellsChanged()
+check(math.abs(FK:FareFactor() - 0.5) < 0.01, "factors saved with the perk are kept while it is still known")
+IsPlayerSpell = savedIsPlayerSpell
+FK:OnSpellsChanged()
+check(FK:FareFactor() == 1, "and forgotten when it isn't")
+TaxiNodeCost = nil
+GetTaxiMapID = nil
+
+-- Finding 10: one routing predicate. Every context carries both flightUsable and flightNodeFound; the rule is
+-- FlightKnowledge.Usable, and "every flight" is the one shared AnyFlight function.
+do
+    check(FK.Usable(true, false) == true and FK.Usable(false, true) == false, "found flies, reported not found never does")
+    check(FK.Usable(nil, true) == true and FK.Usable(nil, false) == false, "unknown flies only when assumed")
+    local live = addon:GetPlayerContext()
+    check(type(live.flightUsable) == "function" and type(live.flightNodeFound) == "function", "the game's context carries both")
+    local free = makeCtx({})
+    check(free.flightUsable == FK.AnyFlight and free.flightNodeFound("TAXI_22") == true, "a test context defaults to every flight")
+end

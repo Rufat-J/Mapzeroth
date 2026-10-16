@@ -1,758 +1,644 @@
--- MultiRoute.lua
--- Multi-destination routing: distance matrix builder + brute-force TSP solver.
--- Used by the Pet Trainer routing feature (and future multi-stop routes).
---
--- Flow:
---   1. BuildDistanceMatrixAsync  — runs FindPath for every pair of locations,
---                                  spread across frame ticks to avoid freezing
---   2. SolveTSP / SolveNearestNeighbour — find cheapest visit order
---   3. RouteMultiDestination     — entry point called by GUI buttons;
---                                  stitches per-leg steps into one master list
 local addonName, addon = ...
 
--- How many Dijkstra pairs to compute per frame tick.
--- Lower = smoother client, longer wall-clock time.
--- At ~40ms per pair, 2 pairs/frame = ~80ms/frame = still interactive.
-local MATRIX_BATCH_SIZE = 2
------------------------------------------------------------
--- GET TOMTOM WAYPOINTS
--- Reads all active TomTom waypoints and returns them in
--- the standard pointList format: { name, mapID, x, y }
--- Returns nil + message if TomTom isn't loaded or has no waypoints.
------------------------------------------------------------
-function addon:GetTomTomWaypoints()
-    if not TomTom or not TomTom.waypoints then
-        return nil, "TomTom is not installed or has no waypoints table."
-    end
-
-    local points = {}
-
-    for mapID, waypointsOnMap in pairs(TomTom.waypoints) do
-        for _, waypointData in pairs(waypointsOnMap) do
-            -- TomTom stores { [1]=mapID, [2]=x, [3]=y, title="..." }
-            -- x/y are already fractional (0.0–1.0)
-            if waypointData[1] and waypointData[2] and waypointData[3] then
-                table.insert(points, {
-                    name = waypointData.title or ("Waypoint on " .. tostring(mapID)),
-                    mapID = waypointData[1],
-                    x = waypointData[2],
-                    y = waypointData[3]
-                })
-            end
-        end
-    end
-
-    if #points == 0 then
-        return nil, "TomTom has no active waypoints."
-    end
-
-    return points
-end
-
------------------------------------------------------------
--- HELPER: FILTER OUT COOLDOWN ABILITIES
--- Returns a copy of playerAbilities with any ability that
--- has a meaningful cooldown removed.
--- Used so the distance matrix is based only on always-available
--- travel methods, giving a consistent and honest visit order.
------------------------------------------------------------
-
-local function FilterCooldownAbilities(playerAbilities)
-    local filtered = {}
-    for _, ability in ipairs(playerAbilities) do
-        if not ability.cooldown or ability.cooldown == 0 then
-            table.insert(filtered, ability)
-        end
-    end
-    return filtered
-end
-
------------------------------------------------------------
--- HELPER: CONSUME USED COOLDOWN ABILITIES
--- After building a leg's steps, remove any ability that was
--- consumed (has a cooldown and appeared in a step) so it
--- isn't offered again on subsequent legs.
------------------------------------------------------------
-
-local function ConsumeUsedAbilities(playerAbilities, legSteps)
-    local usedItemIDs = {}
-    local usedSpellIDs = {}
-    for _, step in ipairs(legSteps) do
-        if step.itemID then
-            usedItemIDs[step.itemID] = true
-        end
-        if step.spellID then
-            usedSpellIDs[step.spellID] = true
-        end
-    end
-
-    -- Find which shared cooldown groups were triggered this leg
-    local usedGroups = {}
-    for _, ability in ipairs(playerAbilities) do
-        local wasUsed = (ability.itemID and usedItemIDs[ability.itemID]) or
-                            (ability.spellID and usedSpellIDs[ability.spellID])
-        if wasUsed and ability.sharedCooldownGroup and ability.cooldown and ability.cooldown > 0 then
-            usedGroups[ability.sharedCooldownGroup] = true
-        end
-    end
-
-    local remaining = {}
-    for _, ability in ipairs(playerAbilities) do
-        local wasUsed = (ability.itemID and usedItemIDs[ability.itemID]) or
-                            (ability.spellID and usedSpellIDs[ability.spellID])
-        local groupConsumed = ability.sharedCooldownGroup and usedGroups[ability.sharedCooldownGroup]
-        -- Drop if it (or its shared cooldown group) was consumed this leg
-        if (wasUsed or groupConsumed) and ability.cooldown and ability.cooldown > 0 then
-            -- on cooldown for the rest of this route
-        else
-            table.insert(remaining, ability)
-        end
-    end
-
-    return remaining
-end
-
------------------------------------------------------------
--- ASYNC DISTANCE MATRIX BUILDER
+-- A tour: several places to visit, in whichever order is quickest (a round of pet tamers for an achievement).
+-- The entry is { name, stops = { stop, ... } }, a stop being { name, place = { id, mapID, x, y, name, leave = true } }
+-- for a spot that isn't one of our nodes (a /way point), or { name, nodeID } for one that is. Journey:PlanEntry
+-- hands an entry with stops to MultiRoute:Plan.
 --
--- Computes cost[i][j] = travel cost from point i to point j,
--- spread across multiple frame ticks via C_Timer.After(0, ...).
+-- How it is planned:
+--   1. The time from the start and from every stop to every other stop: one search from each (FindCosts prices
+--      everywhere at once), with the abilities a trip can use only once (the hearthstone) left out, so the order
+--      doesn't lean on something only one leg can have.
+--   2. The quickest order to visit them all, ending at whichever stop comes last (no way back): exact up to
+--      EXACT_LIMIT stops, a good one (nearest first, then improved by moves) beyond.
+--   3. The one-use abilities brought in: what each would make of a leg (its cast, then the way from where it lands
+--      to the stop: guessed from the way back, then searched for real for the landings the plan takes), and the order improved by
+--      moves (two stops swapped, one moved, a stretch turned round) priced with them, each given to at most one leg
+--      (Path of the Windrunners to EPL, then fly on to the Hinterlands, not the Hinterlands first and back).
+--   4. Each leg planned in that order, from the stop before, by the same search as a trip to one place
+--      (Journey:PlanLeg), with the one-use ability step 3 gave it, if any, and no other.
+-- A stop no route reaches is left out and named in plan.dropped.
 --
--- pointList:       array of { name, mapID, x, y }
--- matrixAbilities: cooldown-filtered abilities (no cooldown items)
--- playerLocation:  current player coords (index 0), may be nil
--- onComplete:      callback(costMatrix) fired when all pairs done
------------------------------------------------------------
+-- The plan is a Journey plan with legs: { cost, fare, steps (every leg's in a row), legs = { { name, cost, fare,
+-- steps, heading, stop } }, goal, raw, dropped, assumed, unaffordable }. Navigation and the panel follow and list
+-- it leg by leg (Journey:Legs).
 
-function addon:BuildDistanceMatrixAsync(pointList, matrixAbilities, playerLocation, onComplete)
-    local n = #pointList
+local MultiRoute = {}
+addon.MultiRoute = MultiRoute
 
-    -- Build the points lookup: 0 = player, 1..n = destinations
-    local points = {}
-    points[0] = playerLocation
-    for i = 1, n do
-        points[i] = {
-            mapID = pointList[i].mapID,
-            x = pointList[i].x,
-            y = pointList[i].y
-        }
+local L = addon.L
+
+local EXACT_LIMIT = 12      -- stops: the exact order's work grows as 2^n * n^2 (12 stops: about 600,000 steps)
+local OPTIONS_PER_STOP = 4  -- one-use abilities weighed for each stop when ordering: the quickest few (MultiRoute.Options)
+local MAX_BOOSTS = 20       -- landings of one-use abilities searched from for real (the rest are guessed): see Plan
+local INF = math.huge
+
+-- ---------------------------------------------------------------------------------------
+-- The order.
+
+-- cost(i, j): seconds from i to j, i = 0 the start, 1..n the stops; INF when there's no way.
+
+local function pathCost(cost, order)
+    local total, from = 0, 0
+    for _, k in ipairs(order) do
+        total = total + cost(from, k)
+        from = k
     end
+    return total
+end
 
-    -- Pre-generate all (i, j) pairs we need to compute.
-    -- Skip j=0 (never route back to player start) and i==j.
-    local pairs = {}
-    for i = 0, n do
+-- Exact: the quickest order over every subset of stops (Held-Karp). best[mask][j] is the quickest way from the start
+-- through the stops in `mask` ending at j.
+local function exactOrder(cost, n)
+    local pow = {}
+    for i = 1, n do pow[i] = 2 ^ (i - 1) end
+    local function has(mask, i) return math.floor(mask / pow[i]) % 2 == 1 end
+    local full = 2 ^ n - 1
+    local best, prev = {}, {}
+    for j = 1, n do
+        best[pow[j] * 32 + j] = cost(0, j)
+    end
+    for mask = 1, full do
         for j = 1, n do
-            if i ~= j then
-                table.insert(pairs, {
-                    i = i,
-                    j = j
-                })
-            end
-        end
-    end
-
-    local totalPairs = #pairs
-
-    -- Initialise cost matrix: diagonal = 0, everything else = huge
-    local cost = {}
-    for i = 0, n do
-        cost[i] = {}
-        for j = 0, n do
-            cost[i][j] = (i == j) and 0 or math.huge
-        end
-    end
-
-    local pairIndex = 1
-    local lastProgress = 0
-
-    local function processBatch()
-        for _ = 1, MATRIX_BATCH_SIZE do
-            if pairIndex > totalPairs then
-                -- All pairs done — fire the completion callback
-                onComplete(cost)
-                return
-            end
-
-            local pair = pairs[pairIndex]
-            local i, j = pair.i, pair.j
-            pairIndex = pairIndex + 1
-
-            local synthetic = addon:BuildSyntheticEdges(points[i], matrixAbilities, points[j])
-
-            local _, routeCost = addon:FindPath("_PLAYER_POSITION", "_WAYPOINT_DESTINATION", matrixAbilities, synthetic)
-
-            cost[i][j] = (type(routeCost) == "number") and routeCost or math.huge
-        end
-
-        -- Report progress at 25% increments so chat isn't spammed
-        local progress = math.floor((pairIndex - 1) / totalPairs * 4) * 25
-        if progress > lastProgress and progress < 100 then
-            lastProgress = progress
-            print(string.format("[Mapzeroth] Calculating... %d%%", progress))
-        end
-
-        -- Yield for one frame tick then resume
-        C_Timer.After(0, processBatch)
-    end
-
-    processBatch()
-end
-
------------------------------------------------------------
--- TSP: BRUTE-FORCE PERMUTATION SOLVER
--- Only suitable for n <= 10. For larger sets use heuristic.
------------------------------------------------------------
-
-local function permute(arr, start, results)
-    if start > #arr then
-        local copy = {}
-        for i = 1, #arr do
-            copy[i] = arr[i]
-        end
-        table.insert(results, copy)
-        return
-    end
-    for i = start, #arr do
-        arr[start], arr[i] = arr[i], arr[start]
-        permute(arr, start + 1, results)
-        arr[start], arr[i] = arr[i], arr[start]
-    end
-end
-
-function addon:SolveTSP(costMatrix, destinationCount)
-    local indices = {}
-    for i = 1, destinationCount do
-        indices[i] = i
-    end
-
-    local allPerms = {}
-    permute(indices, 1, allPerms)
-
-    local bestCost = math.huge
-    local bestOrder = nil
-
-    for _, perm in ipairs(allPerms) do
-        local totalCost = costMatrix[0][perm[1]]
-
-        for i = 2, #perm do
-            totalCost = totalCost + costMatrix[perm[i - 1]][perm[i]]
-            if totalCost >= bestCost then
-                break
-            end
-        end
-
-        if totalCost < bestCost then
-            bestCost = totalCost
-            bestOrder = perm
-        end
-    end
-
-    return bestOrder, bestCost
-end
-
------------------------------------------------------------
--- NEAREST-NEIGHBOUR HEURISTIC
--- Fallback for n > 10.
------------------------------------------------------------
-
-function addon:SolveNearestNeighbour(costMatrix, destinationCount)
-    local visited = {}
-    local order = {}
-    local current = 0
-    local totalCost = 0
-
-    for _ = 1, destinationCount do
-        local bestNext = nil
-        local bestCost = math.huge
-
-        for j = 1, destinationCount do
-            if not visited[j] and costMatrix[current][j] < bestCost then
-                bestCost = costMatrix[current][j]
-                bestNext = j
-            end
-        end
-
-        if not bestNext then
-            break
-        end
-
-        visited[bestNext] = true
-        table.insert(order, bestNext)
-        totalCost = totalCost + bestCost
-        current = bestNext
-    end
-
-    -- Warn if any destinations were unreachable
-    if #order < destinationCount then
-        print(string.format("[Mapzeroth] |cFFFFAA00Warning: %d/%d stops unreachable and skipped.|r",
-            destinationCount - #order, destinationCount))
-    end
-
-    return order, totalCost
-end
-
------------------------------------------------------------
--- STITCH LEGS INTO ONE STEP LIST (ASYNC)
--- Same logic as StitchLegs but yields between each leg to
--- avoid hitting WoW's per-frame CPU execution limit on large
--- routes (50+ stops). Fires onComplete(allSteps, totalCost)
--- when all legs are processed, or onComplete(nil, nil) on error.
------------------------------------------------------------
-
-local function StitchLegsAsync(trainerList, bestOrder, playerAbilities, onComplete)
-    local allSteps = {}
-    local totalCost = 0
-    local remainingAbilities = playerAbilities
-    local legIndex = 1
-
-    local function processLeg()
-        if legIndex > #bestOrder then
-            onComplete(allSteps, totalCost)
-            return
-        end
-
-        local i = legIndex
-        local idx = bestOrder[i]
-        legIndex = legIndex + 1
-
-        local trainer = trainerList[idx]
-        local waypoint = {
-            mapID = trainer.mapID,
-            x = trainer.x,
-            y = trainer.y,
-            name = trainer.name
-        }
-
-        local fromCoords
-        if i == 1 then
-            fromCoords = addon:GetPlayerLocation()
-        else
-            local prev = trainerList[bestOrder[i - 1]]
-            fromCoords = {
-                mapID = prev.mapID,
-                x = prev.x,
-                y = prev.y
-            }
-        end
-
-        local synthetic = addon:BuildSyntheticEdges(fromCoords, remainingAbilities, waypoint)
-        local path, legCost, previous = addon:FindPath("_PLAYER_POSITION", "_WAYPOINT_DESTINATION", remainingAbilities,
-            synthetic)
-
-        if not path then
-            print(string.format("[Mapzeroth] Could not route to %s: %s", trainer.name, legCost or "unknown error"))
-            onComplete(nil, nil)
-            return
-        end
-
-        local legSteps = addon:BuildStepList(path, legCost, previous, waypoint)
-        local optimisedLeg, optimisedCost = addon:OptimizeConsecutiveMovement(legSteps)
-
-        totalCost = totalCost + optimisedCost
-        remainingAbilities = ConsumeUsedAbilities(remainingAbilities, optimisedLeg)
-
-        for _, step in ipairs(optimisedLeg) do
-            step.num = #allSteps + 1
-            table.insert(allSteps, step)
-        end
-
-        C_Timer.After(0, processLeg)
-    end
-
-    processLeg()
-end
-
------------------------------------------------------------
--- ENTRY POINT
--- Called by GUI buttons. Async — returns immediately and
--- fires the display pipeline via callback when ready.
------------------------------------------------------------
-
-function addon:RouteMultiDestination(trainerList, label)
-    local n = #trainerList
-
-    if n == 0 then
-        print("[Mapzeroth] No destinations in list.")
-        return
-    end
-
-    if not addon.bagsFullyLoaded then
-        print("[Mapzeroth] |cFFFFAA00Warning: Bags still loading - route may be missing travel items.|r")
-    end
-
-    print(string.format("[Mapzeroth] Calculating optimal route for %s (%d stops)...", label, n))
-
-    local playerAbilities = addon:GetAvailableTravelAbilities()
-    local matrixAbilities = FilterCooldownAbilities(playerAbilities)
-    local playerLocation = addon:GetPlayerLocation()
-
-    addon:BuildDistanceMatrixAsync(trainerList, matrixAbilities, playerLocation, function(costMatrix)
-
-        local bestOrder
-        if n <= 10 then
-            bestOrder = addon:SolveTSP(costMatrix, n)
-        else
-            bestOrder = addon:SolveNearestNeighbour(costMatrix, n)
-        end
-
-        if not bestOrder then
-            print("[Mapzeroth] Could not find a valid route. Are you on the right continent?")
-            return
-        end
-
-        -- Stitch legs with full abilities, consuming cooldowns as used
-        StitchLegsAsync(trainerList, bestOrder, playerAbilities, function(allSteps, totalCost)
-            if not allSteps or #allSteps == 0 then
-                print("[Mapzeroth] Route produced no steps.")
-                return
-            end
-
-            if addon.DEBUG then
-                print(string.format("[Mapzeroth] %s (%d stops, est. %.0fs):", label, n, totalCost))
-                for i, idx in ipairs(bestOrder) do
-                    print(string.format("  %d. %s", i, trainerList[idx].name))
+            local here = best[mask * 32 + j]
+            if here and here < INF then
+                for k = 1, n do
+                    if not has(mask, k) then
+                        local key = (mask + pow[k]) * 32 + k
+                        local d = here + cost(j, k)
+                        if d < (best[key] or INF) then
+                            best[key], prev[key] = d, j
+                        end
+                    end
                 end
             end
+        end
+    end
+    local last, total = nil, INF
+    for j = 1, n do
+        local d = best[full * 32 + j]
+        if d and d < total then last, total = j, d end
+    end
+    if not last then return nil end
+    local order, mask = {}, full
+    while last do
+        table.insert(order, 1, last)
+        local before = prev[mask * 32 + last]
+        mask = mask - pow[last]
+        last = before
+    end
+    return order, total
+end
 
-            addon:ShowGPSNavigator(allSteps, totalCost)
-
-            if addon.MapzerothFrame and addon.MapzerothFrame:IsShown() then
-                addon:ShowRouteExecutionFrame(allSteps, totalCost)
+-- A good order for many stops: nearest first, then improved until no single move helps -- turning a stretch of the
+-- tour round (2-opt), or taking one stop out and putting it somewhere else. yield() between rounds of moves.
+local function heuristicOrder(cost, n, yield)
+    local order, used, from = {}, {}, 0
+    for _ = 1, n do
+        local pick, pickCost
+        for k = 1, n do
+            if not used[k] and (not pickCost or cost(from, k) < pickCost) then pick, pickCost = k, cost(from, k) end
+        end
+        used[pick] = true
+        order[#order + 1] = pick
+        from = pick
+    end
+    local total = pathCost(cost, order)
+    local improved, passes = true, 0
+    while improved and passes < 50 do
+        improved, passes = false, passes + 1
+        for i = 1, n - 1 do
+            for j = i + 1, n do
+                local trial = {}
+                for k = 1, i - 1 do trial[#trial + 1] = order[k] end
+                for k = j, i, -1 do trial[#trial + 1] = order[k] end
+                for k = j + 1, n do trial[#trial + 1] = order[k] end
+                local t = pathCost(cost, trial)
+                if t < total then order, total, improved = trial, t, true end
             end
-        end)
-    end)
-end
-
------------------------------------------------------------
--- V2: ANCHOR-AWARE MULTI-DESTINATION ROUTING
---
--- Same as RouteMultiDestination, but considers all instant
--- teleport options (hearthstones, tabards, class ports) as
--- candidate starting anchors. Picks whichever anchor produces
--- the cheapest complete tour, not just the cheapest first hop.
---
--- Cost: one matrix build (same as V1) + n × numAnchors extra
--- Dijkstra calls for the anchor cost vectors. Typically <50%
--- overhead vs V1, no additional full matrix passes.
------------------------------------------------------------
-
------------------------------------------------------------
--- HELPER: NODE COORDINATE LOOKUP
--- Searches addon.Nodes (all traversal groups) for a nodeID.
--- Returns the node table, or nil if not found.
------------------------------------------------------------
-
-local function NodeLookup(nodeID)
-    for traversalGroup, groupData in pairs(addon.Nodes) do
-        if groupData[nodeID] then
-            return groupData[nodeID], traversalGroup
+            yield()
+        end
+        for i = 1, n do
+            for j = 1, n do
+                if i ~= j then
+                    local trial = {}
+                    for k = 1, n do if k ~= i then trial[#trial + 1] = order[k] end end
+                    table.insert(trial, j, order[i])
+                    local t = pathCost(cost, trial)
+                    if t < total then order, total, improved = trial, t, true end
+                end
+            end
+            yield()
         end
     end
-    return nil, nil
+    return order, total
 end
 
------------------------------------------------------------
--- HELPER: COLLECT INSTANT-TELEPORT ANCHORS
--- Returns a list of { name, mapID, x, y } for every available
--- ability that teleports to a fixed, known node. Deduplicates
--- by destination so two toys going to the same place only
--- produce one anchor candidate.
---
--- allowedGroups: set of traversal group keys to permit.
--- Any anchor whose destination lives in a different group
--- is skipped — it's on the wrong continent and would only
--- add Dijkstra overhead without a realistic chance of winning.
------------------------------------------------------------
-
-local function GetInstantTeleportAnchors(playerAbilities, allowedGroups)
-    local anchors = {}
-    local seen = {}
-
-    for _, ability in ipairs(playerAbilities) do
-        local dest = ability.destination
-
-        -- Timephased single-destination teleports: resolve the live
-        -- destination the same way Pathfinder.BuildSyntheticEdges does,
-        -- so these show up as anchor candidates too.
-        if not dest and ability.destinationsByArtID then
-            local info = ability.destinationsByArtID
-            local currentArt = info.checkMapID and C_Map.GetMapArtID(info.checkMapID)
-            dest = currentArt and info[currentArt]
+-- Improves an order by single moves until none helps: two stops swapped, one moved elsewhere, a stretch turned round.
+-- price(order) is what an order costs (anything: here, the legs with the one-use abilities given out). yield()
+-- (optional) between rounds of moves.
+function MultiRoute.Improve(order, price, yield)
+    yield = yield or function() end
+    local n = #order
+    local best = price(order)
+    local function try(trial)
+        local t = price(trial)
+        if t < best - 1e-9 then
+            order, best = trial, t
+            return true
         end
+    end
+    local improved, passes = true, 0
+    while improved and passes < 50 do
+        improved, passes = false, passes + 1
+        for i = 1, n - 1 do
+            for j = i + 1, n do
+                local swapped = {}
+                for k = 1, n do swapped[k] = order[k] end
+                swapped[i], swapped[j] = swapped[j], swapped[i]
+                if try(swapped) then improved = true end
+                local turned = {}
+                for k = 1, i - 1 do turned[#turned + 1] = order[k] end
+                for k = j, i, -1 do turned[#turned + 1] = order[k] end
+                for k = j + 1, n do turned[#turned + 1] = order[k] end
+                if try(turned) then improved = true end
+            end
+            yield()
+        end
+        for i = 1, n do
+            for j = 1, n do
+                if i ~= j then
+                    local moved = {}
+                    for k = 1, n do if k ~= i then moved[#moved + 1] = order[k] end end
+                    table.insert(moved, j, order[i])
+                    if try(moved) then improved = true end
+                end
+            end
+            yield()
+        end
+    end
+    return order, best
+end
 
-        if dest and not seen[dest] then
-            local node, group = NodeLookup(dest)
-            if node and node.mapID and node.x and node.y and (not allowedGroups or allowedGroups[group]) then
-                seen[dest] = true
-                table.insert(anchors, {
-                    name = (ability.name or "?") .. " → " .. (node.name or dest),
-                    mapID = node.mapID,
-                    x = node.x,
-                    y = node.y
-                })
+-- Gives one-use abilities to the legs of an order, each ability to one leg at most and each leg one at most, the
+-- biggest saving first. legCost(from, to) is a leg without them; options[to] the quickest ways to stop `to` by an
+-- ability, { { a, seconds }, ... } quickest first (MultiRoute.Options: a few per stop, as only those can win). Returns
+-- the total and { [leg number] = a }. Called for every order tried, so it is kept to a few steps a leg.
+function MultiRoute.Assign(order, legCost, options)
+    local total, saves = 0, {}
+    local from = 0
+    for k, to in ipairs(order) do
+        local base = legCost(from, to)
+        total = total + base
+        for _, option in ipairs(options[to] or {}) do
+            if option[2] >= base then break end
+            saves[#saves + 1] = { gain = base - option[2], leg = k, a = option[1] }
+        end
+        from = to
+    end
+    table.sort(saves, function(x, y) return x.gain > y.gain end)
+    local given, usedLeg = {}, {}
+    local usedAbility = {}
+    for _, save in ipairs(saves) do
+        if not usedLeg[save.leg] and not usedAbility[save.a] then
+            usedLeg[save.leg], usedAbility[save.a] = true, true
+            given[save.leg] = save.a
+            total = total - save.gain
+        end
+    end
+    return total, given
+end
+
+-- options[stop] for Assign from land[a][stop] (seconds to that stop by ability a): its `keep` quickest, sorted.
+function MultiRoute.Options(land, keep)
+    local options = {}
+    for a, row in pairs(land) do
+        for stop, t in pairs(row) do
+            options[stop] = options[stop] or {}
+            table.insert(options[stop], { a, t })
+        end
+    end
+    for _, list in pairs(options) do
+        table.sort(list, function(x, y) return x[2] < y[2] end)
+        for i = #list, (keep or #list) + 1, -1 do list[i] = nil end
+    end
+    return options
+end
+
+-- The quickest order to visit stops 1..n from the start (0): a list of stop numbers and its seconds, or nil when
+-- no order reaches them all. `cost` is a function (i, j) or a table cost[i][j] (nil for no way). yield (optional): as
+-- for Plan.
+function MultiRoute.Order(cost, n, yield)
+    yield = yield or function() end
+    if type(cost) == "table" then
+        local t = cost
+        cost = function(i, j) return (t[i] and t[i][j]) or INF end
+    end
+    if n == 0 then return {}, 0 end
+    local order, total
+    if n <= EXACT_LIMIT then
+        order, total = exactOrder(cost, n)
+    else
+        order, total = heuristicOrder(cost, n, yield)
+    end
+    if not order or total == INF then return nil end
+    return order, total
+end
+
+-- ---------------------------------------------------------------------------------------
+-- The plan.
+
+local function stopID(stop)
+    return stop.place and stop.place.id or stop.nodeID
+end
+
+local function heading(number, leg)
+    return L["ROUTE_STOP_HEADING"]:format(number, leg.name)
+end
+
+-- Puts a tour's legs together as one plan.
+local function assemble(session, legs, dropped)
+    local Journey = addon.Journey
+    local plan = { cost = 0, fare = 0, steps = {}, raw = {}, legs = legs, dropped = dropped, money = session.ctx.money }
+    for _, leg in ipairs(legs) do
+        plan.cost = plan.cost + leg.cost
+        plan.fare = plan.fare + (leg.fare or 0)
+        for _, step in ipairs(leg.steps) do plan.steps[#plan.steps + 1] = step end
+        for _, step in ipairs(leg.raw or {}) do plan.raw[#plan.raw + 1] = step end
+        if leg.unaffordable then plan.unaffordable = true end
+        plan.goal = leg.goal
+    end
+    plan.assumed = Journey:AssumedFlights(session.ctx, plan.raw)
+    return plan
+end
+
+-- Marks the one-use abilities a leg took as spent.
+local function spend(spent, oneUse, leg)
+    for _, step in ipairs(leg.raw or {}) do
+        local key = step.source and addon.Pathfinder.AbilityKey(step.source)
+        if key and oneUse[key] then spent[key] = true end
+    end
+end
+
+local function copy(set)
+    local out = {}
+    for k, v in pairs(set) do out[k] = v end
+    return out
+end
+
+-- The tour for `entry` from where the session starts: a plan with legs (see the top of the file), or nil when no
+-- stop can be reached. `yield` (optional) is called between searches (MultiRoute:Run spreads them over frames).
+-- An entry with `keep` (Navigation, planning the rest of a tour again from where a flight went astray) has its order
+-- and its later legs already: only the way to its first stop is searched, and those legs follow it as they were.
+function MultiRoute:Plan(session, entry, yield)
+    yield = yield or function() end
+    local Journey, Pathfinder = addon.Journey, addon.Pathfinder
+    local graph = session.graph
+    local oneUse = {}
+    for _, key in ipairs(Journey:OneUseAbilities(session)) do oneUse[key] = true end
+
+    if entry.keep then
+        local first = entry.stops[1]
+        local later = {}                  -- what the kept legs spend, which the way to the first stop must leave them
+        for _, leg in ipairs(entry.keep) do spend(later, oneUse, leg) end
+        local leg = first and Journey:PlanLeg(session, session.start.id, stopID(first), later)
+        if not leg then return nil end
+        leg.name, leg.stop = first.name, first
+        leg.heading = heading(first.number or 1, leg)
+        local legs = { leg }
+        for _, kept in ipairs(entry.keep) do legs[#legs + 1] = kept end
+        return assemble(session, legs, {})
+    end
+
+    -- 1. The time between every two places, without the one-use abilities. Each search stops once it has priced every
+    -- stop (Pathfinder:FindCosts' targets): the rest of the world is no part of the tour.
+    local opts = { fareFactor = session.ctx.fareFactor or 1, banned = oneUse }
+    local targets = {}
+    for _, stop in ipairs(entry.stops) do targets[stopID(stop)] = true end
+    local fromStart = Pathfinder:FindCosts(graph, session.start.id, graph.phase, opts, targets)
+    yield()
+    local stops, dropped = {}, {}
+    for _, name in ipairs(entry.unplaced or {}) do dropped[#dropped + 1] = name end
+    for _, stop in ipairs(entry.stops) do
+        if fromStart[stopID(stop)] then stops[#stops + 1] = stop else dropped[#dropped + 1] = stop.name end
+    end
+    if #stops == 0 then return nil end
+    targets = {}                                      -- a stop nothing reaches would make every search the whole world
+    for _, stop in ipairs(stops) do targets[stopID(stop)] = true end
+    local rows = { [0] = fromStart }
+    for i, stop in ipairs(stops) do
+        -- Out to the farthest stop, and at least as far as the way here from the start: a one-use ability landing
+        -- within that can shorten a leg into this stop (the way back from here to it stands in for the way there).
+        rows[i] = Pathfinder:FindCosts(graph, stopID(stop), graph.phase, opts, targets, fromStart[stopID(stop)])
+        yield()
+    end
+    local function cost(i, j)
+        return rows[i][stopID(stops[j])] or INF
+    end
+
+    -- 2. The order. A stop the others can't be reached from (or reach) makes every order impossible: leave out the
+    -- one with the fewest ways in or out until an order exists.
+    local order = MultiRoute.Order(cost, #stops, yield)
+    while not order and #stops > 1 do
+        local worst, worstLinks
+        for i = 1, #stops do
+            local links = 0
+            for j = 1, #stops do
+                if i ~= j and cost(i, j) < INF then links = links + 1 end
+                if i ~= j and cost(j, i) < INF then links = links + 1 end
+            end
+            if not worstLinks or links < worstLinks then worst, worstLinks = i, links end
+        end
+        dropped[#dropped + 1] = stops[worst].name
+        table.remove(stops, worst)
+        table.remove(rows, worst)
+        order = MultiRoute.Order(cost, #stops, yield)
+    end
+    if not order then return nil end
+    yield()
+
+    -- 3. The one-use abilities: where each lands (graph.anywhere: one entry per landing, an ability with a choice of
+    -- landings having several: Mole Machine has twenty) and its cast. The way on from a landing to a stop is first
+    -- guessed from the way back (rows[stop] already prices every landing; most travel is the same both ways), so the
+    -- order can be improved and the abilities given out without a search more. Only a landing that is actually given
+    -- to a leg is then searched from, for real, and the order improved again with what that search found, until the
+    -- landings given out are all known for real (or MAX_BOOSTS searches have been made). A landing no stop leads back
+    -- to (the bound spot, the camp) has no guess, so it is searched from first.
+    local landings = {}                               -- { key, to, cost, guess = { [stop] = s }, real = { [stop] = s } }
+    for _, ability in ipairs(graph.anywhere or {}) do
+        local key = ability.source and Pathfinder.AbilityKey(ability.source)
+        if key and oneUse[key] then
+            local landing = { key = key, to = ability.to, cost = ability.cost, guess = {} }
+            local any = false
+            for j, stop in ipairs(stops) do
+                local back = ability.to == stopID(stop) and 0 or rows[j][ability.to]
+                if back then landing.guess[j], any = ability.cost + back, true end
+            end
+            -- No guess: no search from a stop got as far as it before pricing every stop. Mostly that is a landing
+            -- too far off to help, but not always: the way back can be long where the way there is quick (the
+            -- hearthstone to an inn in Goldshire, then Stormwind's portals to Northrend). So the hearthstone's landing
+            -- (and the bound spot, the camp, which no search reaches at all) is searched from for real anyway; the
+            -- rest are left out.
+            landing.unguessed = not any and (ability.method == "hearthstone" or not addon.World:GetNode(ability.to))
+            landings[#landings + 1] = landing
+        end
+    end
+    local searches, searched = 0, {}
+    local function search(landing)
+        local from = searched[landing.to]           -- Hearthstone and Astral Recall land in one place: searched once
+        if not from then
+            searches = searches + 1
+            from = Pathfinder:FindCosts(graph, landing.to, graph.phase, opts, targets)
+            searched[landing.to] = from
+        end
+        landing.real = {}
+        for j, stop in ipairs(stops) do
+            local on = landing.to == stopID(stop) and 0 or from[stopID(stop)]
+            if on then landing.real[j] = landing.cost + on end
+        end
+        yield()
+    end
+    for _, landing in ipairs(landings) do
+        if landing.unguessed and searches < MAX_BOOSTS then search(landing) end
+    end
+    -- land[key][stop] = the quickest way to that stop by that ability, and through which landing.
+    local function abilityTimes()
+        local land, via = {}, {}
+        for _, landing in ipairs(landings) do
+            local times = landing.real or landing.guess
+            for j, t in pairs(times) do
+                land[landing.key] = land[landing.key] or {}
+                via[landing.key] = via[landing.key] or {}
+                if t < (land[landing.key][j] or INF) then land[landing.key][j], via[landing.key][j] = t, landing end
             end
         end
+        return land, via
     end
-
-    return anchors
-end
-
------------------------------------------------------------
--- HELPER: BUILD ANCHOR COST VECTORS (ASYNC)
--- For each anchor in anchorList, runs FindPath to every
--- destination in pointList and stores the cost.
---
--- Returns: anchorVectors[anchorIdx][destIdx] = cost
--- Same batching strategy as the main matrix builder.
------------------------------------------------------------
-
-local function BuildAnchorCostVectorsAsync(anchorList, pointList, matrixAbilities, onComplete)
-    local numAnchors = #anchorList
-    local numDests = #pointList
-
-    if numAnchors == 0 then
-        onComplete({})
-        return
-    end
-
-    -- Pre-build the point coord table for destinations
-    local destPoints = {}
-    for j = 1, numDests do
-        destPoints[j] = {
-            mapID = pointList[j].mapID,
-            x = pointList[j].x,
-            y = pointList[j].y
-        }
-    end
-
-    -- Initialise result table
-    local vectors = {}
-    for i = 1, numAnchors do
-        vectors[i] = {}
-        for j = 1, numDests do
-            vectors[i][j] = math.huge
-        end
-    end
-
-    -- Flatten into a simple work queue: { anchorIdx, destIdx }
-    local workQueue = {}
-    for i = 1, numAnchors do
-        for j = 1, numDests do
-            table.insert(workQueue, {
-                i = i,
-                j = j
-            })
-        end
-    end
-
-    local totalWork = #workQueue
-    local workIndex = 1
-
-    local function processAnchorBatch()
-        for _ = 1, MATRIX_BATCH_SIZE do
-            if workIndex > totalWork then
-                onComplete(vectors)
-                return
+    local given = {}
+    if #landings > 0 then
+        repeat
+            local land, via = abilityTimes()
+            local options = MultiRoute.Options(land, OPTIONS_PER_STOP)
+            order = MultiRoute.Improve(order, function(trial) return (MultiRoute.Assign(trial, cost, options)) end, yield)
+            local _
+            _, given = MultiRoute.Assign(order, cost, options)
+            local guessed = false
+            for number, key in pairs(given) do
+                local landing = via[key][order[number]]
+                if not landing.real and searches < MAX_BOOSTS then
+                    search(landing)
+                    guessed = true
+                end
             end
-
-            local item = workQueue[workIndex]
-            local anchor = anchorList[item.i]
-            workIndex = workIndex + 1
-
-            local synthetic = addon:BuildSyntheticEdges({
-                mapID = anchor.mapID,
-                x = anchor.x,
-                y = anchor.y
-            }, matrixAbilities, destPoints[item.j])
-
-            local _, routeCost = addon:FindPath("_PLAYER_POSITION", "_WAYPOINT_DESTINATION", matrixAbilities, synthetic)
-
-            vectors[item.i][item.j] = (type(routeCost) == "number") and routeCost or math.huge
-        end
-
-        C_Timer.After(0, processAnchorBatch)
+        until not guessed
+        yield()
     end
 
-    processAnchorBatch()
+    -- 4. The legs, in that order, each with the one-use ability it was given and no other.
+    local legs, from = {}, session.start.id
+    for number, k in ipairs(order) do
+        local stop = stops[k]
+        local banned = copy(oneUse)
+        if given[number] then banned[given[number]] = nil end
+        local leg = Journey:PlanLeg(session, from, stopID(stop), banned)
+        yield()
+        if leg then
+            leg.name, leg.stop = stop.name, stop
+            stop.number = #legs + 1
+            leg.heading = heading(stop.number, leg)
+            legs[#legs + 1] = leg
+            from = stopID(stop)
+        else
+            dropped[#dropped + 1] = stop.name
+        end
+    end
+    if #legs == 0 then return nil end
+    return assemble(session, legs, dropped)
 end
 
------------------------------------------------------------
--- HELPER: NEAREST-NEIGHBOUR FROM AN EXTERNAL COST VECTOR
--- Like SolveNearestNeighbour, but the "from start" costs
--- come from a provided vector rather than costMatrix[0].
--- After the first hop, inter-node costs come from costMatrix
--- as normal.
------------------------------------------------------------
-
-local function SolveNNFromVector(firstHopCosts, costMatrix, destinationCount)
-    local visited = {}
-    local order = {}
-    local totalCost = 0
-
-    -- First hop: cheapest destination reachable from anchor
-    local bestNext = nil
-    local bestCost = math.huge
-    for j = 1, destinationCount do
-        if firstHopCosts[j] < bestCost then
-            bestCost = firstHopCosts[j]
-            bestNext = j
+-- Runs work(yield) a little at a time, so a long plan doesn't freeze the game (or run past the client's time limit for
+-- one script): a yield() lets a frame go by once FRAME_BUDGET seconds of work have been done in this one, and otherwise
+-- returns at once. (Letting a frame go by at every yield made a 35-stop tour take 19 s in game for 5 s of work: most
+-- yields come after a sliver of ordering.) done(result, second) is called with what work returned, or with nil if it
+-- failed (the error goes to the game's error handler). Without C_Timer (headless) it runs at once.
+local FRAME_BUDGET = 0.04
+local function now()
+    if debugprofilestop then return debugprofilestop() / 1000 end
+    return os.clock()
+end
+function MultiRoute:Run(work, done)
+    local started
+    local function yield()
+        if now() - started >= FRAME_BUDGET then coroutine.yield() end
+    end
+    local co = coroutine.create(function() return work(yield) end)
+    local function resume()
+        started = now()
+        local ok, a, b = coroutine.resume(co)
+        if not ok then
+            local handler = geterrorhandler and geterrorhandler()
+            if handler then handler(a) end
+            done(nil)
+        elseif coroutine.status(co) == "dead" then
+            done(a, b)
+        elseif C_Timer and C_Timer.After then
+            C_Timer.After(0, resume)
+        else
+            return resume()
         end
     end
-
-    if not bestNext then
-        return nil, math.huge
-    end
-
-    visited[bestNext] = true
-    table.insert(order, bestNext)
-    totalCost = totalCost + bestCost
-    local current = bestNext
-
-    -- Subsequent hops: standard nearest-neighbour on costMatrix
-    for _ = 2, destinationCount do
-        bestNext = nil
-        bestCost = math.huge
-        for j = 1, destinationCount do
-            if not visited[j] and costMatrix[current][j] < bestCost then
-                bestCost = costMatrix[current][j]
-                bestNext = j
-            end
-        end
-        if not bestNext then
-            break
-        end
-
-        visited[bestNext] = true
-        table.insert(order, bestNext)
-        totalCost = totalCost + bestCost
-        current = bestNext
-    end
-
-    return order, totalCost
+    resume()
 end
 
------------------------------------------------------------
--- ENTRY POINT V2
--- Drop-in replacement for RouteMultiDestination.
--- Identical interface; add anchorDebug=true to trainerList
--- metadata if you want the winning anchor printed to chat.
------------------------------------------------------------
+-- ---------------------------------------------------------------------------------------
+-- Stops from /way lines.
 
-function addon:RouteMultiDestinationV2(trainerList, label)
-    local n = #trainerList
-
-    if n == 0 then
-        print("[Mapzeroth] No destinations in list.")
-        return
-    end
-
-    if not addon.bagsFullyLoaded then
-        print("[Mapzeroth] |cFFFFAA00Warning: Bags still loading - route may be missing travel items.|r")
-    end
-
-    print(string.format("[Mapzeroth] Calculating anchor-aware route for %s (%d stops)...", label, n))
-
-    local playerAbilities = addon:GetAvailableTravelAbilities()
-    local matrixAbilities = FilterCooldownAbilities(playerAbilities)
-    local playerLocation = addon:GetPlayerLocation()
-
-    -- Build the set of traversal groups represented in this route.
-    -- Any instant-teleport anchor outside these groups is on the wrong
-    -- continent and gets filtered before the expensive async phase.
-    local allowedGroups = {}
-    for _, trainer in ipairs(trainerList) do
-        local group = addon.GetTraversalGroupForMap(trainer.mapID)
-        if group then
-            allowedGroups[group] = true
-        end
-    end
-
-    -- Phase 1: build the main NxN distance matrix (same as V1)
-    addon:BuildDistanceMatrixAsync(trainerList, matrixAbilities, playerLocation, function(costMatrix)
-
-        -- Phase 2: collect instant-teleport anchors and build their cost vectors.
-        -- We include ALL playerAbilities here (not just cooldown-filtered) because
-        -- hearthstones/tabards ARE cooldown items — they're exactly what we're after.
-        -- Only anchors in the same traversal group(s) as the route are considered.
-        local anchors = GetInstantTeleportAnchors(playerAbilities, allowedGroups)
-
-        BuildAnchorCostVectorsAsync(anchors, trainerList, matrixAbilities, function(anchorVectors)
-
-            -- Phase 3: evaluate every candidate starting point and pick the best tour.
-            -- Candidate 0 = player's current position (row 0 of costMatrix, V1 behaviour).
-            -- Candidates 1..numAnchors = instant-teleport destinations.
-
-            local bestOrder = nil
-            local bestCost = math.huge
-            local bestAnchorName = "current position"
-
-            -- Evaluate from player's current position (V1 parity)
-            local playerOrder, playerCost
-            if n <= 10 then
-                playerOrder, playerCost = addon:SolveTSP(costMatrix, n)
+-- TomTom's /way lines, one point a line: "/way #1 43.8 28.8 Zunta" (map 1, 43.8% across, 28.8% down, named Zunta).
+-- The map can be a zone's name instead ("/way Durotar 43.8 28.8 Zunta"), read by mapByName(name) (addon:MapByName in
+-- the game); the "/way" and the map may be left out (then the point is on defaultMapID, if given); commas between the
+-- numbers are fine, and the name is optional. Returns { { mapID, x, y, name } } with x and y as 0-1, and the lines
+-- that couldn't be read.
+function MultiRoute.ParseWay(text, defaultMapID, mapByName)
+    local points, bad = {}, {}
+    for line in (text or ""):gmatch("[^\r\n]+") do
+        local rest = line:gsub("^%s*/way%s*", ""):gsub("^%s+", ""):gsub("%s+$", "")
+        if rest ~= "" then
+            local mapID = defaultMapID
+            local map, after = rest:match("^#(%d+)%s*(.*)$")
+            if map then
+                mapID, rest = tonumber(map), after
             else
-                playerOrder, playerCost = addon:SolveNearestNeighbour(costMatrix, n)
-            end
-
-            if playerOrder and playerCost < bestCost then
-                bestCost = playerCost
-                bestOrder = playerOrder
-                bestAnchorName = "current position"
-            end
-
-            -- Evaluate from each instant-teleport anchor
-            for i, anchor in ipairs(anchors) do
-                local anchorOrder, anchorCost = SolveNNFromVector(anchorVectors[i], costMatrix, n)
-                if anchorOrder and anchorCost < bestCost then
-                    bestCost = anchorCost
-                    bestOrder = anchorOrder
-                    bestAnchorName = anchor.name
+                -- A zone's name: everything before the first two numbers, when it doesn't start with one.
+                local zone, numbers = rest:match("^(%D.-)%s+([%d%.]+[%s,]+[%d%.]+.*)$")
+                if zone then
+                    zone = zone:gsub(",%s*$", "")
+                    mapID, rest = mapByName and mapByName(zone), numbers
                 end
             end
-
-            if not bestOrder then
-                print("[Mapzeroth] Could not find a valid route. Are you on the right continent?")
-                return
+            local x, y, name = rest:match("^([%d%.]+)[%s,]+([%d%.]+)%s*(.*)$")
+            x, y = tonumber(x), tonumber(y)
+            if mapID and x and y then
+                points[#points + 1] = { mapID = mapID, x = x / 100, y = y / 100, name = name ~= "" and name or nil }
+            else
+                bad[#bad + 1] = line
             end
-
-            -- Report which stops were dropped
-            if #bestOrder < n then
-                local visited = {}
-                for _, idx in ipairs(bestOrder) do
-                    visited[idx] = true
-                end
-                for i = 1, n do
-                    if not visited[i] then
-                        print(string.format("[Mapzeroth] |cFFFFAA00  Skipped: %s|r", trainerList[i].name))
-                    end
-                end
-            end
-
-            if addon.DEBUG then
-                print(string.format("[Mapzeroth] Best start: %s (est. %.0fs total)", bestAnchorName, bestCost))
-            end
-
-            -- Phase 4: stitch legs — identical to V1 from here
-            StitchLegsAsync(trainerList, bestOrder, playerAbilities, function(allSteps, totalCost)
-                if not allSteps or #allSteps == 0 then
-                    print("[Mapzeroth] Route produced no steps.")
-                    return
-                end
-
-                if addon.DEBUG then
-                    print(string.format("[Mapzeroth] %s (%d stops, est. %.0fs):", label, n, totalCost))
-                    for i, idx in ipairs(bestOrder) do
-                        print(string.format("  %d. %s", i, trainerList[idx].name))
-                    end
-                end
-
-                addon:ShowGPSNavigator(allSteps, totalCost)
-
-                if addon.MapzerothFrame and addon.MapzerothFrame:IsShown() then
-                    addon:ShowRouteExecutionFrame(allSteps, totalCost)
-                end
-            end)
-        end)
-    end)
+        end
+    end
+    return points, bad
 end
+
+-- A tour entry for points ({ mapID, x, y, name }, as ParseWay gives them): each becomes a stop at the place the
+-- planner knows it by (addon:PlaceAt: a position on a map with no nodes is carried up to one that has some). Points
+-- on maps we can't place at all are returned second, and kept on the entry (`unplaced`: the plan names them with the
+-- stops it couldn't reach); two points at the same spot are one stop.
+function MultiRoute:Entry(name, points)
+    local stops, unplaced, seen = {}, {}, {}
+    for i, point in ipairs(points) do
+        local place = addon:PlaceAt(point.mapID, point.x, point.y, "STOP")
+        local label = point.name or L["ROUTE_STOP_UNNAMED"]:format(i)
+        if not place then
+            unplaced[#unplaced + 1] = label
+        elseif not seen[place.id] then
+            seen[place.id] = true
+            place.name, place.leave = label, true
+            stops[#stops + 1] = { name = label, place = place }
+        end
+    end
+    return { name = name, stops = stops, unplaced = unplaced, points = points }, unplaced
+end
+
+-- ---------------------------------------------------------------------------------------
+-- Saved routes: the player's own tours, kept for every character (MapzerothRebuildDB.routes), offered in the picker and
+-- edited in the panel. Each is { id, name, way }: its stops as /way lines, each naming its map, so they read the same
+-- whichever map the player is on. A flavour's starters (addon.SampleRoutes, Data/<flavour>/Tours.lua) are added the
+-- first time, once: deleting one keeps it deleted.
+
+local function db()
+    MapzerothRebuildDB = MapzerothRebuildDB or {}
+    local saved = MapzerothRebuildDB
+    if not saved.routes then
+        saved.routes, saved.nextRouteID = {}, 1
+    end
+    if not saved.routesSeeded then
+        saved.routesSeeded = true
+        for _, sample in ipairs(addon.SampleRoutes or {}) do
+            saved.routes[#saved.routes + 1] = { id = saved.nextRouteID, name = sample.name, way = sample.way }
+            saved.nextRouteID = saved.nextRouteID + 1
+        end
+    end
+    return saved
+end
+
+-- The saved routes, in the order they were made.
+function MultiRoute:SavedRoutes()
+    return db().routes
+end
+
+function MultiRoute:FindRoute(id)
+    for _, route in ipairs(db().routes) do
+        if route.id == id then return route end
+    end
+end
+
+-- Saves a route (a new one when id is nil) and returns its id.
+function MultiRoute:SaveRoute(id, name, way)
+    local saved = db()
+    local route = id and self:FindRoute(id)
+    if not route then
+        route = { id = saved.nextRouteID }
+        saved.nextRouteID = saved.nextRouteID + 1
+        saved.routes[#saved.routes + 1] = route
+    end
+    route.name, route.way = name, way
+    return route.id
+end
+
+function MultiRoute:DeleteRoute(id)
+    local routes = db().routes
+    for i, route in ipairs(routes) do
+        if route.id == id then
+            table.remove(routes, i)
+            return true
+        end
+    end
+    return false
+end
+
+-- A saved route's stops as points ({ mapID, x, y, name }), read from its /way lines.
+function MultiRoute:RoutePoints(route)
+    return (MultiRoute.ParseWay(route.way))
+end
+
+-- Points as /way lines, each with its map: what a route is saved as.
+function MultiRoute.WayText(points)
+    local lines = {}
+    local function coordinate(v)
+        return (("%.2f"):format(v * 100):gsub("0+$", ""):gsub("%.$", ""))
+    end
+    for _, point in ipairs(points) do
+        local line = ("/way #%d %s %s"):format(point.mapID, coordinate(point.x), coordinate(point.y))
+        if point.name and point.name ~= "" then line = line .. " " .. point.name end
+        lines[#lines + 1] = line
+    end
+    return table.concat(lines, "\n")
+end
+
+-- ---------------------------------------------------------------------------------------
+-- Holiday routes: lists that ship with the addon (addon.HolidayRoutes, Data/<flavour>/HolidayRoutes.lua, generated),
+-- offered while their holiday is on. Each has its stops for everyone (neutral) and for each faction.
+
+-- The holiday routes this player is offered now, each { route, points }: those whose holiday is on, with the neutral
+-- stops and their own faction's (a player of neither faction gets the neutral ones).
+function MultiRoute:HolidayRoutes(ctx)
+    local offered = {}
+    for _, route in ipairs(addon.HolidayRoutes or {}) do
+        if ctx.holidayActive and ctx.holidayActive(route.holiday) then
+            local points = MultiRoute.ParseWay(route.neutral or "")
+            local own = ctx.faction == "Alliance" and route.alliance or ctx.faction == "Horde" and route.horde
+            for _, point in ipairs(own and MultiRoute.ParseWay(own) or {}) do points[#points + 1] = point end
+            if #points > 0 then offered[#offered + 1] = { route = route, points = points } end
+        end
+    end
+    return offered
+end
+

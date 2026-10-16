@@ -1,0 +1,116 @@
+## Interface: 16001, 120105
+## Title: Mapzeroth (Rebuild)
+## Notes: Rebuilt Mapzeroth engine, Forever and Modern datasets (development build)
+## Author: tr0tsky
+## Version: 2.0.0-dev
+## SavedVariables: MapzerothRebuildDB
+
+# Dev-only TOC: the unsuffixed name is used for every client flavor. The
+# shipped addon will use per-ruleset TOCs (see the design doc, section 1).
+
+Constants.lua
+Locales.lua
+Locales_UI.lua
+Locales\deDE.lua
+Locales\esES.lua
+Locales\frFR.lua
+Locales\itIT.lua
+Locales\koKR.lua
+Locales\ptBR.lua
+Locales\ruRU.lua
+Locales\zhCN.lua
+Locales\zhTW.lua
+Options.lua
+
+# Forever dataset
+Data\Forever\Containers.lua
+Data\Forever\Nodes_EasternKingdoms.lua
+Data\Forever\Nodes_Kalimdor.lua
+Data\Forever\Nodes_ZephrasIsle.lua
+Data\Forever\Edges.lua
+Data\Forever\Flights.lua
+Data\Forever\Borders.lua
+Data\Forever\Pois.lua
+Data\Forever\Blackrock.lua
+Data\Forever\Abilities.lua
+Data\Forever\RidingSkills.lua
+Data\Forever\Professions.lua
+Data\Forever\WeaponSkills.lua
+Data\Forever\ClassSpells.lua
+Data\Forever\Game.lua
+Data\Forever\PathFactors.lua
+Data\Forever\NodeNames_enUS.lua
+Data\Forever\TownNames_enUS.lua
+Data\Forever\InstanceNames_enUS.lua
+Data\Forever\Geometry.lua
+
+# Modern's data: each file skips itself unless this client is Modern (addon.RULESET, Constants.lua); Forever's above do the same.
+Data\Modern\Containers.lua
+Data\Modern\Nodes_EK.lua
+Data\Modern\Nodes_Kalimdor.lua
+Data\Modern\Nodes_Outlands.lua
+Data\Modern\Nodes_Northrend.lua
+Data\Modern\Nodes_Pandaria.lua
+Data\Modern\Nodes_BrokenIsles.lua
+Data\Modern\Nodes_Draenor.lua
+Data\Modern\Nodes_DragonIsles.lua
+Data\Modern\Nodes_KhazAlgar.lua
+Data\Modern\Nodes_Shadowlands.lua
+Data\Modern\Nodes_Zandalar.lua
+Data\Modern\Nodes_Argus.lua
+Data\Modern\Nodes_BfA.lua
+Data\Modern\Nodes_IsolatedMaps.lua
+Data\Modern\Edges.lua
+Data\Modern\Abilities.lua
+Data\Modern\Geometry.lua
+Data\Modern\Instances.lua
+Data\Modern\Places.lua
+Data\Modern\Settlements.lua
+Data\Modern\Pois.lua
+Data\Modern\Movement.lua
+Data\Modern\Game.lua
+Data\Modern\Tours.lua
+Data\Modern\HolidayRoutes.lua
+
+# Engine
+World.lua
+NodeNames.lua
+Hearth.lua
+FlightKnowledge.lua
+Trainers.lua
+ClassTraining.lua
+Relevance.lua
+PlayerAbilities.lua
+Equipment.lua
+MovementSpeed.lua
+EdgeRequirements.lua
+TravelGraph.lua
+Pathfinder.lua
+Search.lua
+Destinations.lua
+Sections.lua
+Location.lua
+Journey.lua
+MultiRoute.lua
+Navigation.lua
+MapRoute.lua
+LeyShare.lua
+LeyScan.lua
+ChatShare.lua
+
+# UI
+UI\Theme.lua
+UI\Themes\Classic.lua
+UI\Themes\ModernDark.lua
+UI\Themes\Cartographer.lua
+UI\RouteLines.lua
+UI\TaxiMark.lua
+UI\MinimapLines.lua
+UI\LinkPopup.lua
+UI\Panel.lua
+UI\MinimapButton.lua
+UI\Navigator.lua
+UI\SharePrompt.lua
+UI\OptionsPanel.lua
+
+Core.lua

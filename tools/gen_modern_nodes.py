@@ -1,0 +1,509 @@
+"""tools/gen_modern_nodes.py -- converts the original retail addon's per-continent node
+files (../Mapzeroth/Data/Mapzeroth_Data_Nodes_*.lua) into the rebuild's node schema
+(Data/Modern/Nodes_*.lua). See docs/DESIGN.md section 2 and 4 for the target shape.
+
+FIRST PASS, geometry only: node id/mapID/x/y carry over unchanged. Names, factions and
+availability move to edges/name-resolution later (section 4/5) and aren't touched here.
+Run it again any time the source addon's node files change; it's fully mechanical and
+takes no data-author judgment calls beyond the ones written up in CONVERSION_NOTES.md,
+which this script regenerates alongside the data every run.
+
+    python tools/gen_modern_nodes.py
+
+Container-path scheme (docs/DESIGN.md section 2):
+    <traversalGroup>.map<mapID>[_art<mapArtID>][.interior]
+
+- <traversalGroup> (lowercased) becomes the new "continent" segment. The old data already
+  scopes fly/walk auto-edges to a traversalGroup exactly the way the new engine wants a
+  continent-level fly domain to work -- confirmed by inspection: Tol Barad, Deepholm, and
+  each Shadowlands realm are already their own separate traversalGroup, not lumped into
+  their landmass's, which is exactly the granularity the new model wants.
+- <mapID> becomes the zone-equivalent leaf. This is a deliberate narrowing from the old
+  model, where ground auto-edges were traversalGroup-wide (see DESIGN.md section 2's
+  "ground auto-edges are zone-scoped only" decision). Old data never named a "zone", so
+  mapID is the only reliable zone proxy available in the source.
+- _art<mapArtID>, when a node carries the old mapArtID marker, keeps time-phase siblings
+  that share one mapID from being merged into one container -- that would silently claim
+  they're walkably connected, which is exactly backwards for two states of one zone.
+  Each such container is tagged with its phase (docs/DESIGN.md section 2):
+  { phaseGroup, phaseSide = the art id, phaseMap = the map whose art shows that side }.
+  The groups come from Zidormi herself: `<ZONE>_ZIDORMI_PAST` / `_PRESENT` nodes name the
+  group (<zone> lower-cased) and their map and art define its sides. Any other phase node
+  joins the group whose side has its art id -- Teldrassil's nodes carry Darkshore's past
+  art (67) on their own maps, so they are Darkshore-past, decided by map 62's art (the old
+  data's phaseCheckMapID said the same). An art id no Zidormi node has stops the run.
+- .interior groups every node the old data flagged `interior = true` on that mapID into
+  one shared sub-container, walled off from the outdoor part the same way a captured city
+  is (TravelGraph.lua's container-based walking pass). KNOWN SIMPLIFICATION: two distinct
+  physical rooms sharing one mapID (Stormwind has several) land in the same interior
+  container and so read as walkably joined, which likely isn't true for all of them.
+  Splitting specific rooms apart is follow-up work; an explicit edge between two interior
+  nodes already covers real connectivity regardless of container, so nothing is silently
+  unreachable in the meantime -- it's just under-connected until edges are ported too.
+
+Flight-master nodes with a confident match in tools/modern_source/flight_node_matches.tsv
+(tools/match_modern_taxi_nodes.py, matched by name against the real retail TaxiNodes table)
+are renamed to TAXI_<realID> here, id and all -- so they get a free, properly-localized name
+from the client at runtime (C_TaxiMap) exactly the way Forever's own flight masters do,
+instead of needing a hand-authored override. gen_modern_edges.py applies the same rename to
+every edge's from/to so the two files stay consistent.
+"""
+import pathlib
+import re
+import sys
+from lupa.lua51 import LuaRuntime
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import modern_manual as manual
+import modern_ids
+import conversion_notes
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+SRC = ROOT.parent / "Mapzeroth" / "Data"
+OUT = ROOT / "Data" / "Modern"
+
+# Old file stem -> (output key for addon.Nodes.<key>, output filename).
+FILES = [
+    ("Mapzeroth_Data_Nodes_EK.lua", "EK", "Nodes_EK.lua"),
+    ("Mapzeroth_Data_Nodes_Kalimdor.lua", "Kalimdor", "Nodes_Kalimdor.lua"),
+    ("Mapzeroth_Data_Nodes_Outlands.lua", "Outlands", "Nodes_Outlands.lua"),
+    ("Mapzeroth_Data_Nodes_Northrend.lua", "Northrend", "Nodes_Northrend.lua"),
+    ("Mapzeroth_Data_Nodes_Pandaria.lua", "Pandaria", "Nodes_Pandaria.lua"),
+    ("Mapzeroth_Data_Nodes_BrokenIsles.lua", "BrokenIsles", "Nodes_BrokenIsles.lua"),
+    ("Mapzeroth_Data_Nodes_Draenor.lua", "Draenor", "Nodes_Draenor.lua"),
+    ("Mapzeroth_Data_Nodes_DragonIsles.lua", "DragonIsles", "Nodes_DragonIsles.lua"),
+    ("Mapzeroth_Data_Nodes_KhazAlgar.lua", "KhazAlgar", "Nodes_KhazAlgar.lua"),
+    ("Mapzeroth_Data_Nodes_Shadowlands.lua", "Shadowlands", "Nodes_Shadowlands.lua"),
+    ("Mapzeroth_Data_Nodes_Zandalar.lua", "Zandalar", "Nodes_Zandalar.lua"),
+    ("Mapzeroth_Data_Nodes_Argus.lua", "Argus", "Nodes_Argus.lua"),
+    ("Mapzeroth_Data_Nodes_BfA.lua", "BfA", "Nodes_BfA.lua"),
+    ("Mapzeroth_Data_Nodes_IsolatedMaps.lua", "IsolatedMaps", "Nodes_IsolatedMaps.lua"),
+]
+
+# Cross-file id collisions (the same node id authored twice against different mapIDs) are two real places:
+# modern_manual.SECOND_COPY_IDS gives the second copy (in FILES order) an id of its own. Any other collision
+# this run finds is new and gets reported, not silently resolved.
+
+# Straight copy of the old Constants.lua's NO_FLY_MAPS (mapID -> comment), the source of
+# truth for which containers get fly = false overrides in the generated Containers.lua.
+NO_FLY_MAPS = {
+    94: "Eversong Woods", 95: "Ghostlands", 110: "Silvermoon City",
+    122: "Isle of Quel'Danas", 103: "Exodar", 97: "Azuremyst Isle", 106: "Bloodmyst Isle",
+    1670: "Oribos", 1671: "Oribos (Ring)", 1543: "The Maw",
+    830: "Krokuun", 882: "Eredath", 883: "Vindicaar, Argus", 885: "Antoran Wastes",
+    554: "Timeless Isle",
+    2346: "Undermine (11.1)",
+    2509: "Coiled Isle / Vaults of Atal'Utek (12.1) -- mount-only, no flying",
+    407: "Darkmoon Island",
+    2266: "The Timeways -- ground mounts, no flying",
+}
+
+
+# Each match file (tools/match_modern_*.py) -> the id prefix its confident matches become.
+MATCH_FILES = {
+    "flight_node_matches.tsv": "TAXI_",
+    "instance_node_matches.tsv": "INSTANCE_",
+}
+
+
+def load_renames():
+    """old node id -> "<PREFIX><realID>", for every "one" (confident) or "many" (ambiguous)
+    row across tools/modern_source/*_matches.tsv (tools/match_modern_taxi_nodes.py and
+    tools/match_modern_instance_nodes.py). "many" takes the first listed candidate on
+    purpose (the user's call: better than the old descriptive id for now, fix the specific
+    ones that turn out wrong later) -- the tsv still lists every candidate it found, so
+    which ones were a guess stays visible. "zero" and "skip" rows are left alone."""
+    renames = {}
+    for filename, prefix in MATCH_FILES.items():
+        path = ROOT / "tools" / "modern_source" / filename
+        if not path.exists():
+            continue
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip() or line.startswith("#"):
+                continue
+            node_id, verdict, real_ids, _name = line.split("\t", 3)
+            if verdict in ("one", "many"):
+                renames[node_id] = f"{prefix}{real_ids.split(',')[0]}"
+    return renames
+
+
+def container_of(group, node):
+    path = f"{group.lower()}.map{int(node['mapID'])}"
+    if node["mapArtID"] is not None:
+        path += f"_art{int(node['mapArtID'])}"
+    if node["interior"]:
+        path += ".interior"
+    return path
+
+
+def write_settlements(emitted, indoor):
+    """Data/Modern/Settlements.lua: modern_manual.CITIES as addon.Cities (Forever's shape), each with a CITY_<KEY>
+    centre node at the average of its nodes (see modern_manual's docstring). A city with no node to average is
+    left out, and returned for the report."""
+    by_id = {e[0]: e for e in emitted}
+
+    def outdoor(container):
+        return not any(container == c or container.startswith(c + ".") for c in indoor) \
+            and ".interior" not in container and "_art" not in container
+
+    city_lines, node_lines, left_out = [], [], []
+    for key, city in sorted(manual.CITIES.items()):
+        main = city["maps"][0]
+        if city.get("nodes"):
+            members = [by_id[i] for i in city["nodes"] if i in by_id]
+        else:
+            on_map = [e for e in emitted if e[2] == main]
+            members = [e for e in on_map if outdoor(e[1])] or on_map
+        if not members:
+            left_out.append(key)
+            continue
+        x = sum(e[3] for e in members) / len(members)
+        y = sum(e[4] for e in members) / len(members)
+        counts = {}
+        for e in members:
+            counts[e[1]] = counts.get(e[1], 0) + 1
+        container = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
+        fields = [f"mapID = {main}", f"x = {x:.4f}", f"y = {y:.4f}", f'faction = "{city["faction"]}"',
+                  "maps = { " + ", ".join(str(m) for m in city["maps"]) + " }", f'expansion = {city["expansion"]}']
+        if city.get("hub"):
+            fields.append("hub = true")
+        if city.get("taxi"):
+            fields.append(f'taxi = "{city["taxi"]}"')
+        city_lines.append(f"    {key} = {{ {', '.join(fields)} }},")
+        node_lines.append(f'    {{ id = "CITY_{key.upper()}", container = "{container}", mapID = {main}, '
+                          f'x = {x:.4f}, y = {y:.4f}, kind = "settlement", city = "{key}" }},')
+    (OUT / "Settlements.lua").write_text(
+        "-- Settlements.lua (Modern) -- GENERATED by tools/gen_modern_nodes.py from tools/modern_manual.py's CITIES,\n"
+        "-- do not hand-edit. The same shape as Forever's cities (Data/Forever/Pois.lua): addon.Cities, and a CITY_<KEY>\n"
+        "-- centre node for each, at the average of the city's outdoor nodes on its own map (or of the nodes CITIES\n"
+        "-- names). No entrances: Modern flies, so a city is arrived at by its centre, not through gates. No towns yet\n"
+        "-- (Modern has no inn data).\n\n"
+        "local addonName, addon = ...\n"
+        "if addon.RULESET ~= \"modern\" then return end   -- one addon for both games: this data is Modern's (Constants.lua)\n\n"
+        "addon.Cities = {\n" + "\n".join(city_lines) + "\n}\n\n"
+        "addon.Towns = {}\n\n"
+        "addon.Nodes = addon.Nodes or {}\n"
+        "addon.Nodes.Settlements = {\n" + "\n".join(node_lines) + "\n}\n",
+        encoding="utf-8",
+    )
+    return left_out
+
+
+def load(lua, loadstring, path):
+    ns = lua.eval("{}")
+    src = path.read_text(encoding="utf-8-sig")
+    chunk = loadstring(src, "@" + path.name)
+    if isinstance(chunk, tuple):
+        raise SystemExit(f"syntax error in {path.name}: {chunk[1]}")
+    chunk("Mapzeroth", ns)
+    return ns
+
+
+def main():
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    loadstring = lua.eval("loadstring")
+
+    OUT.mkdir(parents=True, exist_ok=True)
+    seen_ids = {}          # id -> (file, group) of the copy we kept
+    dupes_seen = []         # (id, kept, dropped) for the report
+    interior_mapids = {}    # (group, mapid) -> count of interior nodes there
+    phase_nodes = []        # (id, group, mapID, mapArtID) for the report
+    mapid_groups = {}       # raw mapID -> set of traversalGroups a node was seen on it with
+    per_group_counts = {}
+    total_written = 0
+    emitted = []            # (id, container, mapID, x, y) of every node written, for the cities' centres
+
+    # First pass: every source id in the order the second pass writes them, for tools/modern_ids.py's one rule.
+    source_ids, seen_first = [], set()
+    for filename, _out_key, out_name in FILES:
+        ns = load(lua, loadstring, SRC / filename)
+        for _group_name, group in ns.Nodes.items():
+            for node_id in group.keys():
+                if node_id in seen_first and node_id in manual.SECOND_COPY_IDS:
+                    node_id = manual.SECOND_COPY_IDS[node_id]
+                if node_id in getattr(manual, "DROP_NODES", []) or node_id in seen_first:
+                    continue
+                seen_first.add(node_id)
+                source_ids.append(node_id)
+        for mn in manual.NODES:
+            if mn["out"] == out_name:
+                source_ids.append(mn["id"])
+    id_plan, rename_collisions = modern_ids.plan(source_ids, manual.INSTANCE_JOURNALS)
+    modern_ids.write(id_plan)
+
+    # Area ids for nodes nothing else names (tools/match_modern_area_nodes.py, and modern_manual.AREA_OVERRIDES).
+    area_of = {}
+    area_file = ROOT / "tools" / "modern_source" / "area_node_matches.tsv"
+    if area_file.exists():
+        for line in area_file.read_text(encoding="utf-8").splitlines():
+            if line and not line.startswith("#"):
+                source, _new, verdict, found = line.split("\t")[:4]
+                if verdict != "zero":
+                    area_of[source] = int(found.split(",")[0])
+    area_of.update(getattr(manual, "AREA_OVERRIDES", {}))
+
+    # Which city a node is part of (Forever tags its city POIs the same way): every node on a city's maps, or only the
+    # nodes CITIES lists for a city that is part of a zone's map.
+    city_of_map, city_of_node = {}, {}
+    for key, city in manual.CITIES.items():
+        if city.get("nodes"):
+            for node_id in city["nodes"]:
+                city_of_node[node_id] = key
+        else:
+            for map_id in city["maps"]:
+                city_of_map[map_id] = key
+
+    def node_fields(source_id, map_id):
+        """The new id, and the fields to write after the position: an area that names it, the city it is part of,
+        and the instance fields (kind, journal, faction)."""
+        new_id, journal, faction = id_plan[source_id]
+        extra = ""
+        if source_id in area_of and journal is None:
+            extra = f", area = {area_of[source_id]}"
+        city = city_of_node.get(new_id) or city_of_map.get(map_id)
+        if city:
+            extra += f', city = "{city}"'
+        kind = getattr(manual, "NODE_KINDS", {}).get(source_id)
+        if kind:
+            extra += f', kind = "{kind}"'
+        if journal is not None:
+            extra += f', kind = "instance", journal = {journal}' + (f', faction = "{faction}"' if faction else "")
+        return new_id, extra
+
+    for filename, out_key, out_name in FILES:
+        ns = load(lua, loadstring, SRC / filename)
+        lines = [f'addon.Nodes.{out_key} = {{']
+        for group_name, group in ns.Nodes.items():
+            count = 0
+            for node_id, node in group.items():
+                if node_id in getattr(manual, "DROP_NODES", []):
+                    continue        # replaced by a hand-added node of the same id (tools/modern_manual.py)
+                if node_id in seen_ids and node_id in manual.SECOND_COPY_IDS:
+                    node_id = manual.SECOND_COPY_IDS[node_id]      # a second, real place under the same old id
+                if node_id in seen_ids:
+                    dupes_seen.append((node_id, seen_ids[node_id], (filename, group_name)))
+                    continue
+                seen_ids[node_id] = (filename, group_name)
+                x, y = float(node["x"]), float(node["y"])
+                container = container_of(group_name, node)
+                container = getattr(manual, "NODE_CONTAINERS", {}).get(node_id, container)   # an interior the old data lacked
+                place = manual.NODE_PLACES.get(node_id)         # a position the old data had wrong (captured in game)
+                if place:
+                    container, x, y = place["container"], place["x"], place["y"]
+                    node = {**{k: node[k] for k in ("name", "interior", "mapArtID")}, "mapID": place["mapID"]}
+                mapid_groups.setdefault(int(node["mapID"]), set()).add(group_name)
+                if node["interior"]:
+                    interior_mapids[(group_name, int(node["mapID"]))] = \
+                        interior_mapids.get((group_name, int(node["mapID"])), 0) + 1
+                if node["mapArtID"] is not None:
+                    phase_nodes.append((node_id, group_name, int(node["mapID"]), int(node["mapArtID"])))
+                name = node["name"] or ""
+                out_id, extra = node_fields(node_id, int(node["mapID"]))
+                lines.append(
+                    f'    {{ id = "{out_id}", container = "{container}", '
+                    f'mapID = {int(node["mapID"])}, x = {x:.4f}, y = {y:.4f}{extra} }}, -- {name}'
+                )
+                emitted.append((out_id, container, int(node["mapID"]), x, y))
+                count += 1
+                total_written += 1
+            per_group_counts[(filename, group_name)] = count
+        for mn in manual.NODES:
+            if mn["out"] != out_name:
+                continue
+            if mn["id"] in seen_ids:
+                raise SystemExit(f"manual node {mn['id']} collides with an id already converted")
+            seen_ids[mn["id"]] = (out_name, "manual")
+            area = f', area = {mn["area"]}' if mn.get("area") else ""
+            if mn.get("faction"):
+                area += f', faction = "{mn["faction"]}"'
+            out_id, extra = node_fields(mn["id"], mn["mapID"])
+            if area:
+                extra = extra.replace(f", area = {area_of.get(mn['id'])}", "")      # its own area wins
+            lines.append(
+                f'    {{ id = "{out_id}", container = "{mn["container"]}", '
+                f'mapID = {mn["mapID"]}, x = {mn["x"]:.4f}, y = {mn["y"]:.4f}{area}{extra} }}, '
+                f'-- {mn["note"]} (hand-added: tools/modern_manual.py)'
+            )
+            emitted.append((out_id, mn["container"], mn["mapID"], mn["x"], mn["y"]))
+            mapid_groups.setdefault(int(mn["mapID"]), set()).add(mn["container"].split(".")[0])   # for NO_FLY_MAPS
+            total_written += 1
+        lines.append('}')
+        (OUT / out_name).write_text(
+            f"-- {out_name} (Modern) -- GENERATED by tools/gen_modern_nodes.py from the original\n"
+            f"-- addon's {filename}, do not hand-edit. Geometry only (see the script's own\n"
+            f"-- docstring for the conversion rules and known simplifications); names, factions,\n"
+            f"-- edges and containers-flag overrides are separate, later passes.\n\n"
+            "local addonName, addon = ...\n"
+            "if addon.RULESET ~= \"modern\" then return end   -- one addon for both games: this data is Modern's (Constants.lua)\n\n"
+            "addon.Nodes = addon.Nodes or {}\n\n"
+            + "\n".join(lines) + "\n",
+            encoding="utf-8",
+        )
+
+    # Containers.lua: fly = false for every container a NO_FLY_MAPS mapID landed in (matched
+    # by raw mapID, not the mapArtID-qualified path -- a zone's phase-siblings share whether
+    # flying works there), and indoor = true for every interior container this pass made, per
+    # docs/DESIGN.md section 2 ("defaults to true for any Interior container" -- not automatic
+    # in the engine, so it has to be written down here explicitly).
+    no_fly_containers = {}     # container path -> NO_FLY_MAPS comment
+    no_fly_unmatched = []      # mapIDs with no node on them in this data at all
+    for mapid, comment in NO_FLY_MAPS.items():
+        groups = mapid_groups.get(mapid)
+        if not groups:
+            no_fly_unmatched.append((mapid, comment))
+            continue
+        for group in groups:
+            no_fly_containers[f"{group.lower()}.map{mapid}"] = comment
+    indoor_containers = {
+        f"{group.lower()}.map{mapid}.interior": count
+        for (group, mapid), count in interior_mapids.items()
+    }
+    container_lines = [
+        "-- Containers.lua (Modern) -- GENERATED by tools/gen_modern_nodes.py.",
+        "-- fly = false is mined from the old Constants.lua's NO_FLY_MAPS table, matched against",
+        "-- the containers the node conversion actually produced (see CONVERSION_NOTES.md for",
+        f"-- {len(no_fly_unmatched)} NO_FLY_MAPS mapID(s) with no node on them in this data to match against).",
+        "-- indoor = true is set for every interior container this pass made (see its own note",
+        "-- in CONVERSION_NOTES.md about per-mapID, not per-room, grouping).",
+        "",
+        "local addonName, addon = ...",
+        "if addon.RULESET ~= \"modern\" then return end   -- one addon for both games: this data is Modern's (Constants.lua)",
+        "",
+        "addon.Containers = addon.Containers or {}",
+        'addon.Containers[""] = { fly = true, indoor = false }   -- Modern has flying broadly, unlike Forever',
+        "",
+    ]
+    for path, comment in sorted(no_fly_containers.items()):
+        container_lines.append(f'addon.Containers["{path}"] = {{ fly = false }} -- {comment}')
+    container_lines.append("")
+    for path, count in sorted(indoor_containers.items()):
+        container_lines.append(f'addon.Containers["{path}"] = {{ indoor = true }} -- {count} interior node(s)')
+    for path in manual.INDOOR:
+        container_lines.append(f'addon.Containers["{path}"] = {{ indoor = true }} -- hand-marked interior (tools/modern_manual.py)')
+    # Phase groups (see the docstring): art id -> (group, phaseMap) from the Zidormi nodes, then a tag for every
+    # phase-split container.
+    sides = {}
+    for node_id, _group, map_id, art_id in phase_nodes:
+        m = re.match(r"^(.+)_ZIDORMI_(PAST|PRESENT)$", node_id)
+        if m:
+            sides[art_id] = (m.group(1).lower(), map_id)
+    phase_containers = {}
+    for node_id, group_name, map_id, art_id in phase_nodes:
+        if art_id not in sides:
+            raise SystemExit(f"phase node {node_id} (map {map_id}, art {art_id}): no Zidormi node has art {art_id}, "
+                             "so it belongs to no phase group")
+        phase_containers[f"{group_name.lower()}.map{map_id}_art{art_id}"] = (sides[art_id], art_id)
+    container_lines.append("")
+    container_lines.append("-- Phase groups (Zidormi's zones): phaseSide is the side's map art id, phaseMap the map whose art shows it.")
+    for path, ((group, phase_map), art_id) in sorted(phase_containers.items()):
+        container_lines.append(f'addon.Containers["{path}"] = {{ phaseGroup = "{group}", phaseSide = {art_id}, '
+                               f'phaseMap = {phase_map} }}')
+    (OUT / "Containers.lua").write_text("\n".join(container_lines) + "\n", encoding="utf-8")
+    cities_left_out = write_settlements(emitted, set(indoor_containers) | set(manual.INDOOR))
+
+    # Collisions resolved by giving the second copy its own id, so they don't silently vanish from the report.
+    for node_id, second in manual.SECOND_COPY_IDS.items():
+        dupes_seen.append((node_id, "the first copy", f"the second copy, kept as {second}"))
+
+    notes = [
+        "# Modern node conversion notes (GENERATED by tools/gen_modern_nodes.py)",
+        "",
+        f"{total_written} nodes written across {len(FILES)} files.",
+        "",
+        "## Needs a follow-up pass before this data is usable for routing",
+        "",
+        "- **Edges** (Mapzeroth/Data/Mapzeroth_Data_Edges.lua, 2018 lines) haven't been converted at",
+        "  all yet. Two real differences from the new engine's own rules, not just a reshape:",
+        "  - The old engine defaults an edge's omitted `cost` to a flat per-method constant",
+        "    (`TRAVEL_COSTS`: portal/teleport/hearthstone/racial = 0, ship = 60, tram = 90,",
+        "    flight = 120, walk/fly = 30/10 as a last-resort-only fallback). The new engine's",
+        "    omitted-cost fallback is distance-based instead (meant for walk/fly, not portals).",
+        "    A straight copy of an old edge with no `cost` would get a nonsense",
+        "    ground-walking-speed cost from the new engine instead of the old flat default --",
+        "    every omitted-cost portal/teleport/ship/tram/flight edge needs its old",
+        "    `TRAVEL_COSTS[method]` value written in literally during conversion.",
+        "  - `requirements.faction` on an edge carries over directly (the new schema already",
+        "    puts faction on edges, never nodes -- and in fact no node in the old data ever",
+        "    carried a `faction` field itself, confirmed by scanning all 14 files, so there's",
+        "    nothing node-level to re-home).",
+        "",
+        "- **Abilities / items / toys** (PlayerAbilities.lua, 1569 lines) not touched yet.",
+        "",
+        "- **Phase-tagged nodes** (mapArtID present) are kept apart from each other (see the",
+        "  `_art<N>` container suffix) so nothing wrongly claims two phase-states of a zone are",
+        f"  walkably joined. {len(phase_nodes)} nodes carry mapArtID; their containers are tagged",
+        f"  with {len(set(g for (g, _m) in sides.values()))} phase groups named after the Zidormi",
+        "  nodes (see the script's docstring), and the search follows the player's side.",
+    ]
+    if phase_nodes:
+        notes.append("")
+        notes.append("  | node | traversalGroup | mapID | mapArtID |")
+        notes.append("  |---|---|---|---|")
+        for node_id, group, mapid, art in phase_nodes:
+            notes.append(f"  | {node_id} | {group} | {mapid} | {art} |")
+
+    notes += [
+        "",
+        "- **Interior grouping is per-mapID, not per-room** (see the script's docstring) for",
+        f"  {sum(interior_mapids.values())} interior nodes across {len(interior_mapids)} distinct",
+        "  (traversalGroup, mapID) pairs. Any pair holding more than one physically-separate room",
+        "  needs splitting into its own sub-container once that's actually confirmed in game --",
+        "  the same way the Wizard's Sanctum was split out for Forever.",
+        "",
+        "  | traversalGroup | mapID | interior nodes there |",
+        "  |---|---|---|",
+    ]
+    for (group, mapid), count in sorted(interior_mapids.items()):
+        notes.append(f"  | {group} | {mapid} | {count} |")
+
+    renamed = [(s, v) for s, v in id_plan.items() if v[0] != s]
+    taxi_count = sum(1 for _s, v in renamed if v[0].startswith("TAXI_"))
+    instance_count = sum(1 for _s, v in id_plan.items() if v[1] is not None)
+    kind_count = len(renamed) - taxi_count - sum(1 for _s, v in renamed if v[0].startswith("INSTANCE_"))
+    notes += [
+        "",
+        f"- **Ids** follow Forever's `<KIND>_<PLACE>` convention (tools/modern_ids.py has the rules; the whole map is "
+        f"tools/modern_source/id_map.tsv): {taxi_count} flight masters are `TAXI_<realID>`, {instance_count} dungeon "
+        f"and raid entrances are `INSTANCE_<NAME>` nodes with `kind = \"instance\"` and their `journal` id, and "
+        f"{kind_count} transports had their kind moved to the front (`BORALUS_DOCK` -> `DOCK_BORALUS`).",
+    ]
+    if rename_collisions:
+        notes.append(f"  - {len(rename_collisions)} rename collision(s) (two old nodes would get the same "
+                      "id -- the first keeps it, the other takes the next rule, see tools/modern_ids.py):")
+        for node_id, new_id, first in rename_collisions:
+            notes.append(f"    - `{node_id}` -> {new_id}, already claimed by `{first}`")
+
+    notes += [
+        "",
+        "## Resolved during this pass",
+        "",
+        "- `category` (city/dungeon/raid, 222 nodes) was dropped: it's old picker-UI",
+        "  classification metadata, not location data, and the new picker (Sections.lua/",
+        "  Destinations.lua) categorizes by settlement kind and relevance rules instead. Revisit",
+        "  if the new picker turns out to want an equivalent grouping.",
+        "- `phaseCheckMapID` (16 nodes) was dropped: it's an old pathfinder-search-time concept",
+        "  tied to the mapArtID/phaseCheckMapID special-casing the new engine's phase model",
+        "  replaces outright (see docs/DESIGN.md section 2) -- phase identity now lives on the",
+        "  zone container, not threaded per-node through the search.",
+        "- Cross-file id collisions: " + (str(len(dupes_seen)) + " found." if dupes_seen else "none found."),
+    ]
+    for node_id, kept, dropped in sorted(dupes_seen, key=str):      # a fixed order: a rerun changes nothing
+        notes.append(f"  - `{node_id}`: kept {kept}, dropped {dropped}")
+    notes.append(
+        "- NO_FLY_MAPS entries with no surviving node to hang a container override off: "
+        + (", ".join(f"{mapid} ({comment})" for mapid, comment in no_fly_unmatched) if no_fly_unmatched else "none.")
+    )
+
+    # Only the top of the file is ours: the edge and ability generators' sections are kept (conversion_notes.py).
+    conversion_notes.write_head(OUT / "CONVERSION_NOTES.md", "\n".join(notes) + "\n")
+
+    print(f"wrote {total_written} nodes across {len(FILES)} files to {OUT}")
+    print(f"{len(manual.CITIES) - len(cities_left_out)} cities written to Settlements.lua; left out (no node): "
+          + (", ".join(cities_left_out) or "none"))
+    print(f"{len(dupes_seen)} id collision(s), {len(phase_nodes)} phase-tagged node(s), "
+          f"{len(interior_mapids)} interior (group, mapID) pair(s), "
+          f"{sum(1 for s, v in id_plan.items() if v[0] != s)} renamed, {len(rename_collisions)} rename collision(s) -- see CONVERSION_NOTES.md")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,173 @@
+local addonName, addon = ...
+
+-- The button on the minimap's rim. Left-click opens or closes the window (the map with the panel beside it when docked,
+-- the panel alone when popped out: Panel:Toggle); right-click opens the settings. Drag it round the rim: where it was
+-- left is kept as an angle in the saved variables. Its look is Theme:MinimapButton's.
+
+local MinimapButton = {}
+addon.MinimapButton = MinimapButton
+
+local L = addon.L
+local Theme = addon.Theme
+
+local ICON = "Interface\\AddOns\\" .. addonName .. "\\Media\\Logo"       -- the logo (Media/Logo.tga; the folder is whatever this addon is called)
+local DEFAULT_ANGLE = 215                                    -- degrees, counter-clockwise from the right: lower left of the rim
+local MARGIN = 5                                             -- how far outside the minimap's edge the button's centre sits
+
+-- Which corners of a minimap are round (the game's GetMinimapShape, which minimap-reshaping addons define):
+-- quadrants 1..4 are top-right, top-left, bottom-right, bottom-left. A square corner sends the button to the corner.
+local ROUND = { true, true, true, true }
+local SHAPES = {
+    ROUND = ROUND, SQUARE = { false, false, false, false },
+    ["CORNER-TOPRIGHT"] = { false, true, true, true }, ["CORNER-TOPLEFT"] = { true, false, true, true },
+    ["CORNER-BOTTOMRIGHT"] = { true, true, false, true }, ["CORNER-BOTTOMLEFT"] = { true, true, true, false },
+    ["SIDE-TOP"] = { false, false, true, true }, ["SIDE-BOTTOM"] = { true, true, false, false },
+    ["SIDE-LEFT"] = { false, true, false, true }, ["SIDE-RIGHT"] = { true, false, true, false },
+}
+
+local button
+
+local function saved(create)
+    if not MapzerothRebuildDB then
+        if not create then return nil end
+        MapzerothRebuildDB = {}
+    end
+    if not MapzerothRebuildDB.minimapButton and create then MapzerothRebuildDB.minimapButton = {} end
+    return MapzerothRebuildDB.minimapButton
+end
+
+function MinimapButton:GetAngle()
+    local data = saved(false)
+    return data and tonumber(data.angle) or DEFAULT_ANGLE
+end
+
+-- Where on the rim `degrees` is, as an offset from the minimap's centre.
+function MinimapButton.Offset(degrees, halfWidth, halfHeight, shape)
+    local radians = math.rad(degrees)
+    local x, y = math.cos(radians), math.sin(radians)
+    local quadrant = 1
+    if x < 0 then quadrant = quadrant + 1 end
+    if y < 0 then quadrant = quadrant + 2 end
+    local w, h = halfWidth + MARGIN, halfHeight + MARGIN
+    if (SHAPES[shape] or ROUND)[quadrant] then return x * w, y * h end
+    -- A square corner: out along the same direction, but no further than the box.
+    local reach = math.sqrt(2 * w * w) - 10
+    return math.max(-w, math.min(x * reach, w)), math.max(-h, math.min(y * reach, h))
+end
+
+function MinimapButton:Place()
+    if not button then return end
+    local x, y = MinimapButton.Offset(self:GetAngle(), (Minimap:GetWidth() or 140) / 2, (Minimap:GetHeight() or 140) / 2,
+        GetMinimapShape and GetMinimapShape() or "ROUND")
+    button:ClearAllPoints()
+    button:SetPoint("CENTER", Minimap, "CENTER", x, y)
+end
+
+function MinimapButton:SetAngle(degrees)
+    saved(true).angle = degrees % 360
+    self:Place()
+end
+
+-- While dragging: the angle from the minimap's centre to the cursor.
+local function follow()
+    local mx, my = Minimap:GetCenter()
+    local scale = Minimap:GetEffectiveScale()
+    local cx, cy = GetCursorPosition()
+    if not (mx and my and scale and scale > 0) then return end
+    local atan2 = math.atan2 or function(y, x) return math.atan(y / x) + (x < 0 and math.pi or 0) end
+    MinimapButton:SetAngle(math.deg(atan2(cy / scale - my, cx / scale - mx)))
+end
+
+-- What either click does: right opens the settings, anything else the window.
+local function click(mouse)
+    if mouse == "RightButton" then
+        if not addon.OptionsPanel:Open() then print(L["CMD_NO_SETTINGS"]) end
+    else
+        addon.Panel:Toggle()
+    end
+end
+
+-- owner: the compartment's row, when shown there (it can't be dragged); the minimap button otherwise.
+function MinimapButton:Tooltip(owner)
+    local lines = {
+        { L["PANEL_TITLE"], "title" },
+        { L["MINIMAP_TIP_TOGGLE"], "body" },
+        { L["MINIMAP_TIP_SETTINGS"], "body" },
+    }
+    if not owner or owner == button then lines[#lines + 1] = { L["MINIMAP_TIP_DRAG"], "dim" } end
+    Theme:ShowTooltip(owner or button, lines)
+end
+
+-- Shown unless the player has hidden it (Options); then it is in the addon compartment instead.
+function MinimapButton:Apply()
+    if button then button:SetShown(not addon.Options:Get("hideMinimapButton")) end
+    self:SyncCompartment()
+end
+
+-- The ring is the minimap rim's look: when another addon gathers the button into its own bar (a button collector
+-- takes it off the minimap), the ring goes and the logo stands alone like the buttons beside it.
+function MinimapButton:SyncRing()
+    if button then button.ring:SetShown(button:GetParent() == Minimap) end
+end
+
+-- Builds the button (once). False where there is no minimap to put it on.
+function MinimapButton:Init()
+    if button then return true end
+    if not Minimap then return false end
+    button = Theme:MinimapButton(Minimap, "MapzerothRebuildMinimapButton", ICON)
+    self.button = button
+    button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    button:RegisterForDrag("LeftButton")
+    button:SetScript("OnClick", function(_, mouse) click(mouse) end)
+    button:SetScript("OnDragStart", function(self)
+        self:SetScript("OnUpdate", follow)
+        Theme:HideTooltip(self)
+    end)
+    button:SetScript("OnDragStop", function(self) self:SetScript("OnUpdate", nil) end)
+    button:SetScript("OnEnter", function() if not button:GetScript("OnUpdate") then MinimapButton:Tooltip() end end)
+    button:SetScript("OnLeave", function() Theme:HideTooltip(button) end)
+    hooksecurefunc(button, "SetParent", function() MinimapButton:SyncRing() end)
+    self:SyncRing()
+    self:Place()
+    self:Apply()
+    addon.Options:OnChange(function(key) if key == "hideMinimapButton" then MinimapButton:Apply() end end)
+    return true
+end
+
+-- The same two clicks from the addon compartment (the minimap's addon list), for players who hide the minimap button:
+-- it is listed there only while the button is hidden, so the two never show at once. Registered from here rather than
+-- the .toc, so the icon's path follows this addon's folder name. Nothing where the client has no compartment.
+local compartmentEntry
+local function entry()
+    compartmentEntry = compartmentEntry or {
+        text = L["PANEL_TITLE"],
+        icon = ICON,
+        notCheckable = true,
+        registerForAnyClick = true,
+        func = function(_, inputData)
+            click(type(inputData) == "table" and inputData.buttonName or (GetMouseButtonClicked and GetMouseButtonClicked()))
+        end,
+        funcOnEnter = function(owner) if owner then MinimapButton:Tooltip(owner) end end,
+        funcOnLeave = function(owner) if owner then Theme:HideTooltip(owner) end end,
+    }
+    return compartmentEntry
+end
+
+local compartmentAdded = false
+function MinimapButton:SyncCompartment()
+    local frame = AddonCompartmentFrame
+    if not (frame and frame.RegisterAddon) then return false end
+    local want = addon.Options:Get("hideMinimapButton") and true or false
+    if want and not compartmentAdded then
+        frame:RegisterAddon(entry())
+        compartmentAdded = true
+    elseif not want and compartmentAdded and type(frame.registeredAddons) == "table" then
+        -- The compartment has no unregister; take our entry out of its list and redraw (what LibDBIcon does).
+        for i, registered in ipairs(frame.registeredAddons) do
+            if registered == compartmentEntry then table.remove(frame.registeredAddons, i) break end
+        end
+        if frame.UpdateDisplay then frame:UpdateDisplay() end
+        compartmentAdded = false
+    end
+    return compartmentAdded
+end
