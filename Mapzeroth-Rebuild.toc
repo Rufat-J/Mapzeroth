@@ -1,9 +1,10 @@
 ## Interface: 16001, 120105
-## Title: Mapzeroth (Rebuild)
-## Notes: Rebuilt Mapzeroth engine, Forever and Modern datasets (development build)
+## Title: Mapzeroth
+## Notes: Forever and Modern datasets (development build)
 ## Author: tr0tsky
 ## Version: 2.0.0-dev
 ## SavedVariables: MapzerothRebuildDB
+## IconTexture: Interface\AddOns\Mapzeroth-Rebuild\Media\Logo
 
 # Dev-only TOC: the unsuffixed name is used for every client flavor. The
 # shipped addon will use per-ruleset TOCs (see the design doc, section 1).

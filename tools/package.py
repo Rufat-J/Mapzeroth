@@ -84,8 +84,9 @@ def main():
         f"## Notes: {rules['notes']}",
         f"## Author: {header.get('Author', '')}",
         f"## Version: {version}",
+        f"## IconTexture: Interface\\AddOns\\{NAME}\\Media\\Logo",                   # the release folder's name, not the dev .toc's
     ]
-    for key in ("SavedVariables", "SavedVariablesPerCharacter", "OptionalDeps", "Dependencies", "IconTexture"):
+    for key in ("SavedVariables", "SavedVariablesPerCharacter", "OptionalDeps", "Dependencies"):
         if key in header:
             toc.append(f"## {key}: {header[key]}")
     toc.append("")
