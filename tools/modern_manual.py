@@ -393,6 +393,20 @@ ZARALEK_EDGES = [
 NODES += ZARALEK_NODES
 EDGES += ZARALEK_EDGES
 
+# Tol Barad: both maps are no-fly, so the Peninsula (245) and the island with Baradin Hold (244) join only where the
+# player crosses between them on the ground; a capture each side (2026-10-16), costed like a zone border (3 s).
+TOL_BARAD_NODES = [
+    {"id": "BORDER_TOL_BARAD_PENINSULA_ISLAND", "out": "Nodes_EK.lua", "container": "tol_barad.map245",
+     "mapID": 245, "x": 0.6683, "y": 0.8207, "note": "Tol Barad Peninsula: the way over to Tol Barad"},
+    {"id": "BORDER_TOL_BARAD_ISLAND_PENINSULA", "out": "Nodes_EK.lua", "container": "tol_barad.map244",
+     "mapID": 244, "x": 0.4099, "y": 0.0558, "note": "Tol Barad: the way over to the Peninsula"},
+]
+TOL_BARAD_EDGES = [
+    {"from": "BORDER_TOL_BARAD_PENINSULA_ISLAND", "to": "BORDER_TOL_BARAD_ISLAND_PENINSULA", "method": "walk", "cost": 3},
+]
+NODES += TOL_BARAD_NODES
+EDGES += TOL_BARAD_EDGES
+
 # The old data walked straight from Oribos to the flight master: two maps, so no distance. The pad route above
 # replaces it (left in, it would undercut the real route).
 DROP_EDGES = [

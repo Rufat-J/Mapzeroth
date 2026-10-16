@@ -259,4 +259,6 @@ addon.Nodes.EK = {
     { id = "NEW_TINKERTOWN_TUNNEL", container = "ek_overworld.map27", mapID = 27, x = 0.3135, y = 0.3803 }, -- New Tinkertown: the tunnel down to Gnomeregan (captured on map 469) (hand-added: tools/modern_manual.py)
     { id = "NEW_TINKERTOWN_TELEPORT_EXIT", container = "ek_overworld.map27", mapID = 27, x = 0.3388, y = 0.3859 }, -- New Tinkertown: where Gnomeregan's teleporter comes out (captured on map 469) (hand-added: tools/modern_manual.py)
     { id = "INSTANCE_GNOMEREGAN_HORDE", container = "ek_overworld.map50", mapID = 50, x = 0.3684, y = 0.5099, kind = "instance", journal = 231, faction = "Horde" }, -- Grom'gol Base Camp: the Horde's teleporter into Gnomeregan (hand-added: tools/modern_manual.py)
+    { id = "BORDER_TOL_BARAD_PENINSULA_ISLAND", container = "tol_barad.map245", mapID = 245, x = 0.6683, y = 0.8207 }, -- Tol Barad Peninsula: the way over to Tol Barad (hand-added: tools/modern_manual.py)
+    { id = "BORDER_TOL_BARAD_ISLAND_PENINSULA", container = "tol_barad.map244", mapID = 244, x = 0.4099, y = 0.0558 }, -- Tol Barad: the way over to the Peninsula (hand-added: tools/modern_manual.py)
 }
