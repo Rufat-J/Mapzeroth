@@ -29,6 +29,8 @@ addon.Containers["sl_oribos.map1671"] = { fly = false } -- Oribos (Ring)
 addon.Containers["sl_the_maw.map1543"] = { fly = false } -- The Maw
 addon.Containers["timeless_isle.map554"] = { fly = false } -- Timeless Isle
 addon.Containers["timeways.map2266"] = { fly = false } -- The Timeways -- ground mounts, no flying
+addon.Containers["tol_barad.map244"] = { fly = false } -- Tol Barad -- ground mounts, no flying
+addon.Containers["tol_barad.map245"] = { fly = false } -- Tol Barad Peninsula -- ground mounts, no flying (reported in game 2026-10-16)
 addon.Containers["undermine.map2346"] = { fly = false } -- Undermine (11.1)
 
 addon.Containers["broken_isles.map715.interior"] = { indoor = true } -- 9 interior node(s)
