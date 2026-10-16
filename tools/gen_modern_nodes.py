@@ -96,6 +96,8 @@ NO_FLY_MAPS = {
     2509: "Coiled Isle / Vaults of Atal'Utek (12.1) -- mount-only, no flying",
     407: "Darkmoon Island",
     2266: "The Timeways -- ground mounts, no flying",
+    244: "Tol Barad -- ground mounts, no flying",
+    245: "Tol Barad Peninsula -- ground mounts, no flying (reported in game 2026-10-16)",
 }
 
 

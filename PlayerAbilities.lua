@@ -186,8 +186,8 @@ function addon:GetPlayerContext()
         campPlace = addon:GetCampPlace(),                   -- where Return to Camp goes (Vulpera), when a camp was made
         questCompleted = isQuestCompleted,
         holidayActive = isHolidayActive,
-        isEquippable = function(itemID) return IsEquippableItem ~= nil and IsEquippableItem(itemID) and true or false end,
-        isEquipped = function(itemID) return IsEquippedItem ~= nil and IsEquippedItem(itemID) and true or false end,
+        isEquippable = function(itemID) local f = addon.ItemFn("IsEquippableItem") return f ~= nil and f(itemID) and true or false end,
+        isEquipped = function(itemID) local f = addon.ItemFn("IsEquippedItem") return f ~= nil and f(itemID) and true or false end,
         -- Every context carries both. flightUsable (can they fly to this point? FlightKnowledge.Usable) is the one
         -- routing predicate; flightNodeFound (true, false, or nil: no window has said) is the raw fact, for hints.
         flightNodeFound = function(nodeID) return addon.FlightKnowledge:IsFound(nodeID) end,
