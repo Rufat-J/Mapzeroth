@@ -851,6 +851,17 @@ function Panel.SplitShares(plan)
     return shares
 end
 
+-- "You're already here": a trip of a few seconds that is only moving yourself (walking or flying). A quick one that
+-- equips, uses or casts something (a 10 s teleport item) still has something to do, so it shows its time.
+local function alreadyThere(plan)
+    if plan.cost >= 20 then return false end
+    for _, step in ipairs(plan.steps or {}) do
+        if step.method ~= "walk" and step.method ~= "fly" then return false end
+    end
+    return true
+end
+Panel.AlreadyThere = alreadyThere
+
 function Panel:DisplayPlan(entry, plan)
     state.view, state.entry, state.plan, state.stepOffset = "route", entry, plan, 0
     state.followedRow = nil                       -- shown afresh: the current step is scrolled to
@@ -859,7 +870,7 @@ function Panel:DisplayPlan(entry, plan)
     showTripChoice()
     setStatus(nil)
     ui.routeTitle:SetText(entry.name)
-    local total = plan.cost < 20 and L["ROUTE_ALREADY"] or L["ROUTE_TOTAL"]:format(Journey:FormatTime(plan.cost))
+    local total = alreadyThere(plan) and L["ROUTE_ALREADY"] or L["ROUTE_TOTAL"]:format(Journey:FormatTime(plan.cost))
     -- A plan with legs (a round trip's way there and back, a tour's stops: Journey:Legs) lists each leg under its
     -- heading, if it has one (the navigator follows them all: Navigation:Start). rowOf maps the navigator's step number
     -- to its row in that list.
