@@ -1,5 +1,5 @@
 ## Interface: 16001, 120105
-## Title: Mapzeroth
+## Title: Mapzeroth Dev
 ## Notes: Forever and Modern datasets (development build)
 ## Author: tr0tsky
 ## Version: 2.0.0-dev
