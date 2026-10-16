@@ -4,6 +4,8 @@
 
 Mapzeroth has been rebuilt from the ground up, on the same engine as Mapzeroth for WoW: Forever. If you've tried it in the Forever Beta, it'll be very familiar.
 
+All settings are back to their defaults, so make any changes you need after you load in. Favourites from 1.x don't carry over. Mapzeroth reads where your hearthstone is bound from the game. If your routes don't use your hearthstone when you think it should, bind it again at your inn and it'll know exactly where it leads.
+
 ### Added
 - **Multi-stop routes.** Paste `/way` lines, or use your existing TomTom waypoints, and it plans the quickest order through every stop. The navigator takes you through them one stop at a time. The routing algorithm has been greatly improved since its initial release.
 - **Holiday Routes.** Ready-made routes that show up while a holiday is on. Hallow's End's candy buckets are first, split by continent and faction. More updates to this before this year's event (hopefully)
@@ -11,7 +13,7 @@ Mapzeroth has been rebuilt from the ground up, on the same engine as Mapzeroth f
 - **The route on your map and minimap:** dotted lines on foot, dashed for flights, and a ring with an arrow where a teleport leaves and lands.
 - **A new navigator** with an arrow pointing to your next step, a Cast / Use button showing the spell or item's icon, and a Recalculate button. Shortcuts (should) count: cut across a field and it moves on to the next step.
 - **Zidormi phases.** Routes (should) know which time phase you're in for Darkshore, Blasted Lands, Tirisfal, Uldum, Dustwallow, Silithus and the Vale of Eternal Blossoms, and use Zidormi when the other one is quicker.
-- **Teleport gear.** Cloaks, tabards, rings and other wearable teleports have their own steps and to equip and use, including buttons to do so on the navigator.
+- **Teleport gear.** Cloaks, tabards, rings and other wearable teleports have their own steps to equip and use, including buttons to do so on the navigator.
 - **Hearthstone to your inn**, and Vulpera's Return to Camp to wherever you last made camp.
 - **Themes:** Classic, Modern Dark and Cartographer. Potentially more to follow based on feedback.
 - **Shift-click a place in the picker to share it in chat** with the game's own map pin.
