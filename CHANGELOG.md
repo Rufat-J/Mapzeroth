@@ -2,25 +2,25 @@
 
 ## 2.0.0 (Retail)
 
-Mapzeroth has been rebuilt from the ground up, on the same engine as Mapzeroth for WoW: Forever. Your settings start fresh.
+Mapzeroth has been rebuilt from the ground up, on the same engine as Mapzeroth for WoW: Forever. If you've tried it in the Forever Beta, it'll be very familiar.
 
 ### Added
-- **Multi-stop routes.** Paste `/way` lines, or use your TomTom waypoints, and Mapzeroth plans the quickest order through every stop. The navigator takes you through them one stop at a time.
-- **Holiday Routes.** Ready-made routes that show up while a holiday is on. Hallow's End's candy buckets are first, split by continent and faction.
-- **Saved routes.** Save a route under a name, then edit its stops or delete it later. The pet battle tamer routes come ready-saved.
+- **Multi-stop routes.** Paste `/way` lines, or use your existing TomTom waypoints, and it plans the quickest order through every stop. The navigator takes you through them one stop at a time. The routing algorithm has been greatly improved since its initial release.
+- **Holiday Routes.** Ready-made routes that show up while a holiday is on. Hallow's End's candy buckets are first, split by continent and faction. More updates to this before this year's event (hopefully)
+- **Saved routes.** Save a route under a name, then edit its stops or delete it later. The pet battle tamer routes come ready-saved as samples which I was using for testing, you can delete them if they're not useful.
 - **The route on your map and minimap:** dotted lines on foot, dashed for flights, and a ring with an arrow where a teleport leaves and lands.
-- **A new navigator** with an arrow pointing to your next step, a Cast / Use button showing the spell or item's icon, and a Recalculate button. Shortcuts count: cut across a field and it moves on to the next step.
-- **Zidormi phases.** Routes know which time phase you're in for Darkshore, Blasted Lands, Tirisfal, Uldum, Dustwallow, Silithus and the Vale of Eternal Blossoms, and use Zidormi when the other one is quicker.
-- **Teleport gear.** Cloaks, tabards, rings and other wearable teleports are equipped for you, used, and your own item is put back afterwards.
+- **A new navigator** with an arrow pointing to your next step, a Cast / Use button showing the spell or item's icon, and a Recalculate button. Shortcuts (should) count: cut across a field and it moves on to the next step.
+- **Zidormi phases.** Routes (should) know which time phase you're in for Darkshore, Blasted Lands, Tirisfal, Uldum, Dustwallow, Silithus and the Vale of Eternal Blossoms, and use Zidormi when the other one is quicker.
+- **Teleport gear.** Cloaks, tabards, rings and other wearable teleports have their own steps and to equip and use, including buttons to do so on the navigator.
 - **Hearthstone to your inn**, and Vulpera's Return to Camp to wherever you last made camp.
-- **Themes:** Classic, Modern Dark and Cartographer.
+- **Themes:** Classic, Modern Dark and Cartographer. Potentially more to follow based on feedback.
 - **Shift-click a place in the picker to share it in chat** with the game's own map pin.
 - **Addon compartment.** With the minimap button hidden, Mapzeroth is listed in the minimap's addon menu.
 - Starter translations for German, Spanish, French, Italian, Korean, Portuguese, Russian and Chinese.
 
 ### Changed
 - **The picker** leads with the current expansion, the capital cities and this season's dungeons. Everything else sits under "Older content", by expansion.
-- Flight masters are only used where you can't fly yourself, such as no-fly islands.
+- Flight masters are only used where you can't fly yourself, such as between Oribos and other zones in Shadowlands.
 
 ## 0.8.1
 
