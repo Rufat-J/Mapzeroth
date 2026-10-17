@@ -5,6 +5,7 @@
 ## Version: 2.0.0-dev
 ## SavedVariables: MapzerothRebuildDB
 ## IconTexture: Interface\AddOns\Mapzeroth-Rebuild\Media\Logo
+## Category: Map
 
 # Dev-only TOC: the unsuffixed name is used for every client flavor. The
 # shipped addon will use per-ruleset TOCs (see the design doc, section 1).

@@ -181,7 +181,7 @@ do
     addon:ClearNodeNameCache()
 end
 
--- Finding 6: the kind an id names leads it, in both flavours (Modern's ids are written that way: tools/modern_ids.py).
+-- Finding 6: the kind an id names leads it, in both flavours (Modern's ids are written that way).
 check(addon:NodeKindFromID("DOCK_STORMWIND") == "DOCK" and addon:NodeKindFromID("TAXI_2") == "TAXI", "an id leads with its kind")
 check(addon:NodeKindFromID("FLIGHT_TOL_DAGOR_ALLIANCE") == "FLIGHT", "FLIGHT is a flight master with no TaxiNodes id")
 check(addon:NodeKindFromID("BORALUS_DOCK") == nil, "a kind at the end is not read (no Modern id is written that way now)")

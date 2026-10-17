@@ -55,8 +55,8 @@ addon.MOUNT_SECONDS = 1.5
 addon.MIN_FLY_SECONDS = 3
 
 -- Using an equippable teleport item (a cloak, ring, trinket, tabard...) that isn't worn takes an equip step first.
--- Seconds that step is priced at unless the item's own `equipCooldown` (Data/Modern/Abilities.lua, from
--- tools/modern_manual.py's EQUIP_COOLDOWNS) says otherwise: most items can be used the moment they are put on
+-- Seconds that step is priced at unless the item's own `equipCooldown` (Data/Modern/Abilities.lua) says
+-- otherwise: most items can be used the moment they are put on
 -- (checked in game for the ones we have), so 0; the odd one has a cooldown after equipping.
 addon.DEFAULT_EQUIP_SECONDS = 0
 

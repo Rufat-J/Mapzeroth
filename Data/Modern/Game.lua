@@ -12,7 +12,7 @@ addon.CLASS_TOKENS = {
 
 -- Seasonal events (a `requirements = { holiday = "..." }` edge, a holiday route's `holiday`): each key is the set of calendar
 -- iconTexture ids the event's day entry can show, matched by PlayerAbilities.lua's ctx.holidayActive against
--- C_Calendar's day events. Keep the keys equal to HOLIDAY_KEYS in tools/gen_modern_edges.py. Optional: a dataset
+-- C_Calendar's day events. Optional: a dataset
 -- without it has no holiday edges.
 addon.HOLIDAYS = {
     love_is_in_the_air = { 235466, 235467, 235468 },
