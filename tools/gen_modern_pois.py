@@ -33,7 +33,7 @@ import re
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-import modern_manual as manual
+import modern_inns as manual
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DATA = ROOT / "Data" / "Modern"
@@ -222,7 +222,7 @@ def main():
 
     flight_masters = [(nid, m, p) for nid, (_, m, p, _) in nodes.items() if nid.startswith("TAXI_")]
     named = [(m, p, a) for _, m, p, a in nodes.values() if a]
-    # Inns the node data already has (tools/modern_manual.py's NODE_KINDS: Silvermoon's): those stand for these.
+    # Inns the node data already has (tools/modern_inns.py's NODE_KINDS: Silvermoon's): those stand for these.
     known_inns = [(nodes[nid][1], nodes[nid][2]) for nid, kind in getattr(manual, "NODE_KINDS", {}).items()
                   if kind == "inn" and nid in nodes]
     towns = {}

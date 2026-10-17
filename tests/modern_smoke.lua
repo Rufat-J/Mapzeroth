@@ -1,19 +1,15 @@
--- A structural smoke test for the Modern conversion pass (tools/gen_modern_nodes.py,
--- gen_modern_edges.py, match_modern_taxi_nodes.py): not a real coverage suite (no
--- Abilities/POI data yet -- see Data/Modern/CONVERSION_NOTES.md), just "does the data load
--- into the real engine without falling over, and does grouping/routing/naming look sane."
--- Run against the Modern TOC, not the default one:
---   python tests/harness.py --toc Mapzeroth-Rebuild_Mainline.toc modern_smoke
+-- A structural smoke test for Modern's data (Data/Modern, hand-maintained since 2026-10-16; first converted from
+-- the 1.x addon's): not a real coverage suite, just "does the data load into the real engine without falling over,
+-- and does grouping/routing/naming look sane."
+--   python tests/harness.py --modern modern_smoke
 -- The shipped Geometry.lua, as loaded: a test below clears it to exercise the live pass.
 local SHIPPED_GEOMETRY, SHIPPED_META, SHIPPED_PACKED = addon.Geometry, addon.GeometryMeta, addon.GeometryPacked
 
 useTestDistances()
 addon.World:Build()
 
--- The whole point of renaming a flight master to TAXI_<realID> (tools/match_modern_taxi_nodes.py):
--- it should get a free, properly-localized name from the client, the same as Forever's,
--- instead of showing its raw id. Ironforge's flight master matched with high confidence
--- (see tools/modern_source/flight_node_matches.tsv) and became TAXI_6.
+-- A flight master is TAXI_<TaxiNodes id>, so it gets a free, properly-localized name from the client, the same as
+-- Forever's, instead of showing its raw id. Ironforge's is TAXI_6.
 local ironforgeFlight = addon.World:GetNode("TAXI_6")
 check(ironforgeFlight, "Ironforge's flight master carried its real taxi id through the rename")
 local maps = {
@@ -30,8 +26,7 @@ end }
 check(addon:GetNodeName("TAXI_6") == "Ironforge Flight Master",
     "a renamed flight master resolves to the client's own name (place without its zone), not its raw id: " .. addon:GetNodeName("TAXI_6"))
 
--- Same idea for a dungeon entrance (tools/match_modern_instance_nodes.py, matched by name
--- against the real JournalInstance table): The Stonecore matched to journalInstanceID 67.
+-- Same idea for a dungeon entrance: INSTANCE_<NAME> with its journalInstanceID (The Stonecore's is 67).
 check(addon.World:GetNode("INSTANCE_THE_STONECORE"), "The Stonecore carried its real journal instance id through the rename")
 EJ_GetInstanceInfo = function(id) if id == 67 then return "The Stonecore" end end
 check(addon:GetNodeName("INSTANCE_THE_STONECORE") == "The Stonecore",
@@ -44,13 +39,12 @@ addon.World:ForEachNode(function(node)
     check(c, "every node resolves to a container: " .. node.id)
     containers[c.path] = (containers[c.path] or 0) + 1
 end)
-check(total == 1796, "every node made it into the tree (1215 converted + 65 hand-added + 24 city centres + 492 inns; a town is its inn): " .. total)
+check(total == 1796, "every node made it into the tree (1280 places + 24 city centres + 492 inns; a town is its inn): " .. total)
 check(#addon.World:GetDuplicateNodeIDs() == 0, "no id collided going into the flat node table: "
     .. table.concat(addon.World:GetDuplicateNodeIDs(), ", "))
 
 -- Stormwind (map 84) is a real one to eyeball: several outdoor nodes plus its own interior
--- container (the several portal rooms grouped together, per the conversion's known
--- simplification -- see CONVERSION_NOTES.md).
+-- container (the several portal rooms grouped together: one interior container per map).
 check(containers["ek_overworld.map84"] and containers["ek_overworld.map84"] > 1,
     "Stormwind's outdoor container holds more than one node")
 check(containers["ek_overworld.map84.interior"] == 17, "and its interior container holds the 17 interior nodes: "
@@ -92,7 +86,7 @@ check(math.abs(toBoralus.cost - ctx.loadingScreenTax) < 0.01,
     "cost 0 plus the loading tax, nothing extra: " .. tostring(toBoralus and toBoralus.cost))
 
 -- The Timeways: Silvermoon's portal in, and the Mythic+ season's one-way portals out to each dungeon
--- (tools/modern_manual.py's MPLUS_SEASON_*), walking on from where each lands to the entrance.
+-- (Data/Modern/Edges.lua), walking on from where each lands to the entrance.
 check(addon.World:GetFlag(addon.World:GetContainer("timeways.map2266"), "fly") == false, "the Timeways is no-fly")
 for _, dungeon in ipairs({ "KINGS_REST", "RUBY_LIFE_POOLS", "TEMPLE_OF_SETHRALISS" }) do
     local trip = addon.Pathfinder:FindPath(graph, "PORTAL_SILVERMOON_TIMEWAYS", "INSTANCE_" .. dungeon)
@@ -167,7 +161,7 @@ do
     check(gated == 21, "21 edges are gated on a phase (18 from the old data, the old Silvermoon portal's two ways back, Azuremyst's portal to present Darkshore): " .. gated)
 end
 
--- Abilities (tools/gen_modern_abilities.py): a real converted Mage teleport seeds the
+-- Abilities (Data/Modern/Abilities.lua): a real Mage teleport seeds the
 -- search from anywhere, exactly like Forever's own Moonglade teleport does.
 local mage = makeCtx({ faction = "Alliance", class = "MAGE", spells = { 3561 } })
 local mageGraph = addon.TravelGraph:Build(mage)
@@ -192,9 +186,9 @@ print(string.format("modern_smoke: %d nodes, %d distinct containers", total, (fu
     return n
 end)()))
 
--- Hand additions (tools/modern_manual.py): the Lycaneum's portal room is an interior, reached on foot from
+-- Captured in game: the Lycaneum's portal room is an interior, reached on foot from
 -- its outside entrance, not by a 2 s hop from the dungeon entrance next door.
-check(addon.World:GetNode("LYCANEUM_ENTRANCE"), "the hand-added Lycaneum entrance is in the tree")
+check(addon.World:GetNode("LYCANEUM_ENTRANCE"), "the Lycaneum entrance is in the tree")
 check(addon.World:GetFlag(addon.World:GetContainer("ek_overworld.map2649"), "indoor") == true, "the Lycaneum is marked indoor")
 local lycGraph = addon.TravelGraph:Build(makeCtx({ faction = "Alliance" }))
 local flyIntoLycaneum, walkOut = false, false
@@ -539,7 +533,7 @@ do
     end
 end
 
--- Nameless nodes matched to an area (tools/match_modern_area_nodes.py) are named by the client, like Forever's.
+-- Nodes with an `area` are named by the client, like Forever's.
 do
     local node = addon.World:GetNode("ZARALEK_CAVERN_MOLE")
     check(node and node.area == 14655, "the Zaralek Cavern mole machine spot is Obsidian Rest's area")

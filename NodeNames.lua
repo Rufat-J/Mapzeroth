@@ -174,7 +174,7 @@ local function borderPartner(nodeID)
 end
 
 -- The kind of place an id names: both flavours' ids lead with it, <KIND>_<PLACE> (DOCK_STORMWIND, TAXI_2,
--- PORTAL_STORMWIND_BORALUS; tools/modern_ids.py writes Modern's that way). nil for an id that is a place's own name
+-- PORTAL_STORMWIND_BORALUS). nil for an id that is a place's own name
 -- (DARK_PORTAL_BL, ORIBOS). FLIGHT is a flight master with no TaxiNodes id to be named by.
 local ID_KINDS = { TAXI = true, FLIGHT = true, BORDER = true, INSTANCE = true, DOCK = true, ZEPPELIN = true,
                    TRAM = true, PORTAL = true, TELEPORT = true }
@@ -329,7 +329,7 @@ function addon:ClearNodeNameCache()
 end
 
 -- The journal instance a dungeon or raid node stands for, and the faction that can use it (nil: either): the
--- node's own `journal` and `faction` (Modern's, from tools/modern_ids.py; Forever's instances have no journal id).
+-- node's own `journal` and `faction` (Modern's; Forever's instances have no journal id).
 function addon:GetInstanceRef(nodeID)
     local node = addon.World:GetNode(nodeID)
     if not node then return nil end

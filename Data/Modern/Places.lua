@@ -25,6 +25,6 @@ addon.SEASONAL_DUNGEONS = {
 }
 
 -- A dungeon or raid node's journal instance is a field on the node (`journal`, and `faction` for an entrance only one
--- faction has): tools/modern_ids.py and tools/modern_manual.py's INSTANCE_JOURNALS.
+-- faction has), set in Nodes_*.lua.
 
--- The cities are in Settlements.lua, generated from tools/modern_manual.py's CITIES (Forever's addon.Cities shape).
+-- The cities are in Settlements.lua (Forever's addon.Cities shape).
