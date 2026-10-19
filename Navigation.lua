@@ -143,6 +143,12 @@ function Navigation:Pointer()
     if not step or kindOf(step.method) ~= "walk" then return nil end
     local sample = self:Sample()
     local node = nodeOf(step.nodeID)
+    if addon.Roads then
+        local target, roadDistance = addon.Roads:Target(sample, function(a, b)
+            return addon.TravelGraph.DistanceProvider(place(you, a), b)
+        end)
+        if target then return roadDistance, self:Heading(sample, target) end
+    end
     return distance(sample, node), self:Heading(sample, node)
 end
 
