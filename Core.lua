@@ -100,13 +100,46 @@ frame:SetScript("OnEvent", function(_, event, ...)
     end
 end)
 
+-- Group-only player lookup. WoW does not expose arbitrary characters' live positions.
+-- Coordinates are reported only when the client exposes a group member's map position.
+local function findGroupPlayer(name)
+    if not name or name == "" then
+        print("AzerothGPS: Usage: /agps find CharacterName")
+        return
+    end
+    local query = name:lower()
+    local units = { "player" }
+    for i = 1, 4 do units[#units + 1] = "party" .. i end
+    for i = 1, 40 do units[#units + 1] = "raid" .. i end
+    for _, unit in ipairs(units) do
+        if UnitExists(unit) then
+            local unitName, realm = UnitName(unit)
+            local fullName = unitName and (realm and realm ~= "" and (unitName .. "-" .. realm) or unitName)
+            if unitName and (unitName:lower() == query or fullName:lower() == query) then
+                local mapID = C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit(unit)
+                local position = mapID and C_Map.GetPlayerMapPosition and C_Map.GetPlayerMapPosition(mapID, unit)
+                if position then
+                    local x, y = position:GetXY()
+                    print(("AzerothGPS: %s - map %d, %.1f, %.1f"):format(fullName, mapID, x * 100, y * 100))
+                else
+                    print("AzerothGPS: " .. fullName .. " is in your group, but their location is unavailable.")
+                end
+                return
+            end
+        end
+    end
+    print("AzerothGPS: Player not found in your party or raid. Other players require opt-in location sharing.")
+end
+
 -- What a player can type. (Development commands are MapzerothDataTools' /mzr.)
 SLASH_MAPZEROTH1 = "/mapzeroth"
 SLASH_MAPZEROTH2 = "/mz"
 SLASH_AZEROTHGPS1 = "/agps"
 local function handleNavigationCommand(msg)
     local cmd = msg:match("^(%S+)")
-    if cmd == "mode" then
+    if cmd == "find" then
+        findGroupPlayer(msg:match("^%S+%s+(%S+)"))
+    elseif cmd == "mode" then
         local mode = msg:match("^%S+%s+(%S+)")
         if mode == "compact" or mode == "detailed" then
             addon.Options:Set("navigatorMode", mode)
@@ -128,7 +161,7 @@ local function handleNavigationCommand(msg)
     elseif cmd == nil or cmd == "ui" then
         addon.Panel:Toggle()
     else
-        print("AzerothGPS: /agps [ui|settings|mode compact|mode detailed|theme modern|theme classic]")
+        print("AzerothGPS: /agps [ui|settings|find Name|mode compact|mode detailed|theme modern|theme classic]")
     end
 end
 
