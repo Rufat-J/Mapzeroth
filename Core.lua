@@ -103,13 +103,26 @@ end)
 -- What a player can type. (Development commands are MapzerothDataTools' /mzr.)
 SLASH_MAPZEROTH1 = "/mapzeroth"
 SLASH_MAPZEROTH2 = "/mz"
-SlashCmdList["MAPZEROTH"] = function(msg)
+SLASH_AZEROTHGPS1 = "/agps"
+local function handleNavigationCommand(msg)
     local cmd = msg:match("^(%S+)")
-    if cmd == "settings" then
+    if cmd == "theme" then
+        local selected = msg:match("^%S+%s+(%S+)")
+        if selected == "modern" or selected == "azerothgps" then
+            addon.Options:Set("theme", "azerothgps")
+        elseif selected == "classic" then
+            addon.Options:Set("theme", "classic")
+        else
+            print("AzerothGPS: /agps theme modern|classic")
+        end
+    elseif cmd == "settings" then
         if not addon.OptionsPanel:Open() then print(L["CMD_NO_SETTINGS"]) end
     elseif cmd == nil or cmd == "ui" then
         addon.Panel:Toggle()
     else
-        print(L["CMD_HELP"])
+        print("AzerothGPS: /agps [ui|settings|theme modern|theme classic]")
     end
 end
+
+SlashCmdList["MAPZEROTH"] = handleNavigationCommand
+SlashCmdList["AZEROTHGPS"] = handleNavigationCommand
