@@ -15,11 +15,11 @@ local Theme = addon.Theme
 local Journey = addon.Journey
 local Navigation = addon.Navigation
 
-local WIDTH, HEIGHT, PAD = 330, 142, 14
+local WIDTH, HEIGHT, PAD = 360, 158, 14
 local INNER = WIDTH - 2 * PAD
 local INTERVAL = 0.5            -- seconds between updates
 local POINTER_INTERVAL = 0.05   -- and between turns of the arrow (and the yards beside it) on foot, in between
-local ARROW = 54                -- the direction arrow, in pixels
+local ARROW = 68                -- the direction arrow, in pixels
 local LINGER = 5                -- seconds "arrived" stays up before the window closes itself
 
 local ui
@@ -114,16 +114,16 @@ local function build()
 
     -- On foot: an arrow that turns to point at the destination, relative to where you face.
     ui.arrow = Theme:Arrow(frame, ARROW)
-    ui.arrow:SetPoint("TOPLEFT", PAD, -68)
+    ui.arrow:SetPoint("TOPLEFT", PAD, -70)
     ui.arrow:Hide()
 
     ui.status = Theme:Text(frame, "accent")
-    ui.status:SetPoint("TOPLEFT", PAD, -74)
-    ui.status:SetWidth(INNER - 90)
+    ui.status:SetPoint("TOPLEFT", PAD + ARROW + 12, -84)
+    ui.status:SetWidth(112)
     ui.status:SetWordWrap(false)
 
     ui.left = Theme:Text(frame, "dim")
-    ui.left:SetPoint("TOPRIGHT", -PAD, -74)
+    ui.left:SetPoint("TOPRIGHT", -PAD, -84)
     ui.left:SetJustifyH("RIGHT")
 
     -- Bottom strip: a progress bar for flights and boats, or a button for something to use.
