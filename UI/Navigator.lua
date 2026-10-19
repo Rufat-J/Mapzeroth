@@ -336,6 +336,13 @@ function Navigator:Render(model)
 
     -- The arrow, when we know which way the player is facing; the text moves aside for it.
     local heading = model.kind == "walk" and model.heading
+    if model.kind == "walk" and addon.Roads and addon.Roads.active then
+        local roadDistance, roadHeading = Navigation:Pointer()
+        if roadHeading then
+            heading = roadHeading
+            if roadDistance then ui.status:SetText(L["NAV_DISTANCE"]:format(math.floor(roadDistance + 0.5))) end
+        end
+    end
     ui.arrow:SetShown(heading ~= nil and heading ~= false)
     if heading then ui.arrow:SetRotation(heading) end
     local indent = heading and (ARROW + 8) or 0
