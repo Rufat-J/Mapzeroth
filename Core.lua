@@ -137,7 +137,16 @@ SLASH_MAPZEROTH2 = "/mz"
 SLASH_AZEROTHGPS1 = "/agps"
 local function handleNavigationCommand(msg)
     local cmd = msg:match("^(%S+)")
-    if cmd == "road" then
+    if cmd == "terrain" then
+        local api = FarstriderLib_API
+        if type(api) ~= "table" or type(api.FindTrail) ~= "function" then
+            print("AzerothGPS: FarstriderLib not detected. Install FarstriderLib and FarstriderLib Data separately to test compatibility.")
+        elseif not (api.DATA and api.DATA.WAYPOINTS) then
+            print("AzerothGPS: FarstriderLib detected, but waypoint data unavailable.")
+        else
+            print("AzerothGPS: FarstriderLib and waypoint data detected. Automatic terrain routing is not enabled yet; Forever compatibility still needs verification.")
+        end
+    elseif cmd == "road" then
         addon.Roads:Command(msg:match("^%S+%s*(.*)") or "")
     elseif cmd == "find" then
         findGroupPlayer(msg:match("^%S+%s+(%S+)"))
