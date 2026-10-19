@@ -102,7 +102,7 @@ local function build(parent)
 
     ui.title = Theme:Text(frame, "title")
     ui.title:SetPoint("TOPLEFT", PAD, -PAD)
-    ui.title:SetText(L["PANEL_TITLE"])
+    ui.title:SetText("AzerothGPS")
 
     -- Beside the map there's often another addon docked to its other side (WorldQuestList and
     -- the like) or the map's own tab row above it, with nowhere to move out of the way to --
