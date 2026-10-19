@@ -16,11 +16,11 @@ local Journey = addon.Journey
 local Navigation = addon.Navigation
 
 local WIDTH, HEIGHT, PAD = 360, 158, 14
-local COMPACT_WIDTH, COMPACT_HEIGHT = 294, 116
+local COMPACT_WIDTH, COMPACT_HEIGHT = 210, 104
 local INNER = WIDTH - 2 * PAD
 local INTERVAL = 0.5            -- seconds between updates
 local POINTER_INTERVAL = 0.05   -- and between turns of the arrow (and the yards beside it) on foot, in between
-local ARROW = 68                -- the direction arrow, in pixels
+local ARROW = 38                -- the direction arrow, in pixels
 local LINGER = 5                -- seconds "arrived" stays up before the window closes itself
 
 local ui
@@ -29,16 +29,39 @@ function Navigator:ApplyMode()
     if not ui then return end
     local compact = addon.Options:Get("navigatorMode") == "compact"
     ui.frame:SetSize(compact and COMPACT_WIDTH or WIDTH, compact and COMPACT_HEIGHT or HEIGHT)
-    ui.title:SetWidth(compact and 130 or INNER - 156)
+    ui.frame:SetBackdropColor(0, 0, 0, compact and 0 or 1)
+    ui.frame:SetBackdropBorderColor(0, 0, 0, compact and 0 or 1)
+    ui.stop:SetShown(not compact)
+    ui.recalc:SetShown(not compact)
+    ui.step:SetShown(not compact)
+    ui.left:SetShown(not compact)
+    ui.bar:SetShown(not compact)
+    if not compact then ui.arrow:SetSize(ARROW, ARROW) else ui.arrow:SetSize(38, 38) end
+    ui.title:SetWidth(compact and COMPACT_WIDTH or INNER - 156)
+    ui.title:ClearAllPoints()
+    ui.title:SetPoint("TOP", ui.frame, "TOP", compact and 0 or -68, compact and -51 or -12)
+    ui.title:SetJustifyH(compact and "CENTER" or "LEFT")
     ui.step:SetWidth(compact and COMPACT_WIDTH - 2 * PAD or INNER)
     ui.step:ClearAllPoints()
     ui.step:SetPoint("TOPLEFT", PAD, compact and -34 or -38)
     ui.arrow:ClearAllPoints()
-    ui.arrow:SetPoint("TOPLEFT", PAD, compact and -52 or -70)
+    if compact then
+        ui.arrow:SetPoint("TOP", ui.frame, "TOP", 0, -4)
+    else
+        ui.arrow:SetPoint("TOPLEFT", PAD, -70)
+    end
     ui.count:SetShown(not compact)
     ui.bar:SetWidth(compact and COMPACT_WIDTH - 2 * PAD or INNER)
     ui.status:ClearAllPoints()
-    ui.status:SetPoint("TOPLEFT", PAD + ARROW + 10, compact and -66 or -88)
+    if compact then
+        ui.status:SetPoint("TOP", ui.frame, "TOP", 0, -75)
+        ui.status:SetJustifyH("CENTER")
+        ui.status:SetWidth(COMPACT_WIDTH)
+    else
+        ui.status:SetPoint("TOPLEFT", PAD + ARROW + 10, -88)
+        ui.status:SetJustifyH("LEFT")
+        ui.status:SetWidth(INNER - 90 - ARROW)
+    end
     ui.left:ClearAllPoints()
     ui.left:SetPoint("TOPRIGHT", -PAD, compact and -90 or -88)
 end
@@ -318,10 +341,21 @@ function Navigator:Render(model)
     local indent = heading and (ARROW + 8) or 0
     ui.status:ClearAllPoints()
     local compact = addon.Options:Get("navigatorMode") == "compact"
-    ui.status:SetPoint("TOPLEFT", PAD + indent, compact and -66 or (heading and -88 or -74))     -- level with the arrow's middle
-    ui.status:SetWidth(compact and 125 or (INNER - 90 - indent))
+    if compact then
+        ui.status:SetPoint("TOP", ui.frame, "TOP", 0, -75)
+    else
+        ui.status:SetPoint("TOPLEFT", PAD + indent, heading and -88 or -74)
+    end     -- level with the arrow's middle
+    ui.status:SetWidth(compact and COMPACT_WIDTH or (INNER - 90 - indent))
     ui.left:ClearAllPoints()
-    ui.left:SetPoint("TOPRIGHT", -PAD, compact and -90 or (heading and -88 or -74))
+    ui.left:SetPoint("TOPRIGHT", -PAD, heading and -88 or -74)
+    ui.left:SetShown(not compact)
+    ui.step:SetShown(not compact)
+    ui.count:SetShown(not compact)
+    ui.stop:SetShown(not compact)
+    ui.recalc:SetShown(not compact and ui.recalc:IsShown())
+    ui.bar:SetShown(not compact and showBar)
+    if compact and not combat then ui.use:Hide() end
 
     ui.bar:SetShown(showBar)
     if showBar then ui.bar:SetValue(model.progress or 0) end
