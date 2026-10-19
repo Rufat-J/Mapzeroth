@@ -15,6 +15,7 @@ local definitions = {
     maxCooldown = { default = 8, min = 1, max = 8, step = 1 },          -- hours: a longer cooldown isn't routed through; the top (8+) is no limit
     scale = { default = 1, min = 0.7, max = 1.5, step = 0.05 },           -- size of our windows
     theme = { default = "azerothgps" },
+    navigatorMode = { default = "compact" },
     showRouteOnMap = { default = true, boolean = true },                  -- the route drawn on the world map
     showRouteOnMinimap = { default = true, boolean = true },              -- and on the minimap, while following a trip
     -- A flight point Mapzeroth hasn't seen a flight master's window about counts as found (FlightKnowledge.lua). Off on
