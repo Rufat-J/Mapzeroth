@@ -106,7 +106,15 @@ SLASH_MAPZEROTH2 = "/mz"
 SLASH_AZEROTHGPS1 = "/agps"
 local function handleNavigationCommand(msg)
     local cmd = msg:match("^(%S+)")
-    if cmd == "theme" then
+    if cmd == "mode" then
+        local mode = msg:match("^%S+%s+(%S+)")
+        if mode == "compact" or mode == "detailed" then
+            addon.Options:Set("navigatorMode", mode)
+            print("AzerothGPS: GPS mode set to " .. mode)
+        else
+            print("AzerothGPS: /agps mode compact|detailed")
+        end
+    elseif cmd == "theme" then
         local selected = msg:match("^%S+%s+(%S+)")
         if selected == "modern" or selected == "azerothgps" then
             addon.Options:Set("theme", "azerothgps")
@@ -120,7 +128,7 @@ local function handleNavigationCommand(msg)
     elseif cmd == nil or cmd == "ui" then
         addon.Panel:Toggle()
     else
-        print("AzerothGPS: /agps [ui|settings|theme modern|theme classic]")
+        print("AzerothGPS: /agps [ui|settings|mode compact|mode detailed|theme modern|theme classic]")
     end
 end
 
