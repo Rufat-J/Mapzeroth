@@ -137,7 +137,9 @@ SLASH_MAPZEROTH2 = "/mz"
 SLASH_AZEROTHGPS1 = "/agps"
 local function handleNavigationCommand(msg)
     local cmd = msg:match("^(%S+)")
-    if cmd == "find" then
+    if cmd == "road" then
+        addon.Roads:Command(msg:match("^%S+%s*(.*)") or "")
+    elseif cmd == "find" then
         findGroupPlayer(msg:match("^%S+%s+(%S+)"))
     elseif cmd == "mode" then
         local mode = msg:match("^%S+%s+(%S+)")
