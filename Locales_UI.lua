@@ -35,7 +35,7 @@ addon:RegisterLocale("enUS", {
     HINT_UNKNOWN = "Open a flight master's window so Mapzeroth can see which flight points you have found. Flying could save %s here.",
 
     -- The panel.
-    PANEL_TITLE       = "Mapzeroth",
+    PANEL_TITLE       = "AzerothGPS",
     SEARCH_HINT       = "Where to?",
     SEARCH_EMPTY      = "Type a town, flight master, inn, trainer, dungeon or anything else.",
     NO_RESULTS        = "Nothing matches.",
@@ -66,7 +66,7 @@ addon:RegisterLocale("enUS", {
     HINT_ONLY_FLIGHT_UNKNOWN = "The only way there uses a flight, and Mapzeroth doesn't know which flight points you have found. Open a flight master's window so it can see.",
     NOWHERE           = "Mapzeroth can't tell where you are right now (instances aren't covered).",
     -- The settings page.
-    OPT_TITLE         = "Mapzeroth",
+    OPT_TITLE         = "AzerothGPS",
     OPT_TAX           = "Loading screen time",
     OPT_TAX_DESC      = "How long a loading screen (a portal, teleport, hearthstone or tram) counts for when Mapzeroth times a route.",
     OPT_MAX_COOLDOWN  = "Longest cooldown to use",
