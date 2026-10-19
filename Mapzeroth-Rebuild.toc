@@ -1,7 +1,7 @@
 ## Interface: 16001, 120105
-## Title: Mapzeroth Dev
-## Notes: Forever and Modern datasets (development build)
-## Author: tr0tsky
+## Title: AzerothGPS (Development)
+## Notes: AzerothGPS navigation powered by Mapzeroth routing (development build)
+## Author: tr0tsky (Mapzeroth); AzerothGPS contributors
 ## Version: 2.0.0-dev
 ## SavedVariables: MapzerothRebuildDB
 ## IconTexture: Interface\AddOns\Mapzeroth-Rebuild\Media\Logo
